@@ -11,21 +11,23 @@
 ########################################################################
 
 """Here is defined the Array class."""
+from __future__ import absolute_import
 
 import operator
 import sys
-
 import numpy
 
-from tables import hdf5extension
-from tables.filters import Filters
-from tables.flavor import flavor_of, array_as_internal, internal_to_flavor
+from . import hdf5extension
+from .filters import Filters
+from .flavor import flavor_of, array_as_internal, internal_to_flavor
+from .leaf import Leaf
+from .utils import (is_idx, convert_to_np_atom2, SizeType, lazyattr,
+                    byteorders, quantize)
 
-from tables.utils import (is_idx, convert_to_np_atom2, SizeType, lazyattr,
-                          byteorders, quantize)
-from tables.leaf import Leaf
+from six.moves import range
+from six.moves import zip
+import six
 
-from tables._past import previous_api, previous_api_property
 
 # default version for ARRAY objects
 # obversion = "1.0"    # initial version
@@ -36,7 +38,7 @@ from tables._past import previous_api, previous_api_property
 obversion = "2.4"    # Numeric and numarray flavors are gone.
 
 
-class Array(hdf5extension.Array, Leaf):
+class Array(hdf5extension.Array, Leaf, six.Iterator):
     """This class represents homogeneous datasets in an HDF5 file.
 
     This class provides methods to write or read data to or from array objects
@@ -88,9 +90,6 @@ class Array(hdf5extension.Array, Leaf):
     # Class identifier.
     _c_classid = 'ARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
-    _v_objectId = previous_api_property('_v_objectid')
-
     # Lazy read-only attributes
     # `````````````````````````
     @lazyattr
@@ -101,30 +100,30 @@ class Array(hdf5extension.Array, Leaf):
 
     # Properties
     # ~~~~~~~~~~
-    def _getnrows(self):
+
+    @property
+    def nrows(self):
+        "The number of rows in the array."
         if self.shape == ():
             return SizeType(1)  # scalar case
         else:
             return self.shape[self.maindim]
-    nrows = property(
-        _getnrows, None, None,
-        "The number of rows in the array.")
 
-    def _getrowsize(self):
+    @property
+    def rowsize(self):
+        "The size of the rows in bytes in dimensions orthogonal to *maindim*."
         maindim = self.maindim
         rowsize = self.atom.size
         for i, dim in enumerate(self.shape):
             if i != maindim:
                 rowsize *= dim
         return rowsize
-    rowsize = property(
-        _getrowsize, None, None,
-        "The size of the rows in bytes in dimensions orthogonal to *maindim*.")
 
-    size_in_memory = property(
-        lambda self: self.nrows * self.rowsize, None, None,
+    @property
+    def size_in_memory(self):
         """The size of this array's data in bytes when it is fully loaded into
-        memory.""")
+        memory."""
+        return self.nrows * self.rowsize
 
     # Other methods
     # ~~~~~~~~~~~~~
@@ -254,8 +253,6 @@ class Array(hdf5extension.Array, Leaf):
 
         return self.atom.enum
 
-    getEnum = previous_api(get_enum)
-
     def iterrows(self, start=None, stop=None, step=None):
         """Iterate over the rows of the array.
 
@@ -328,9 +325,7 @@ class Array(hdf5extension.Array, Leaf):
         self._init = True  # Sentinel
         self.nrow = SizeType(self._start - self._step)    # row number
 
-    _initLoop = previous_api(_init_loop)
-
-    def next(self):
+    def __next__(self):
         """Get the next element of the array during an iteration.
 
         The element is returned as an object of the current flavor.
@@ -386,7 +381,7 @@ class Array(hdf5extension.Array, Leaf):
             ellipsis = 0  # Sentinel
             if isinstance(key, type(Ellipsis)):
                 ellipsis = 1
-                for diml in xrange(dim, len(self.shape) - (nkeys - dim) + 1):
+                for diml in range(dim, len(self.shape) - (nkeys - dim) + 1):
                     startl[dim] = 0
                     stopl[dim] = self.shape[diml]
                     stepl[dim] = 1
@@ -419,7 +414,7 @@ class Array(hdf5extension.Array, Leaf):
 
         # Complete the other dimensions, if needed
         if dim < len(self.shape):
-            for diml in xrange(dim, len(self.shape)):
+            for diml in range(dim, len(self.shape)):
                 startl[dim] = 0
                 stopl[dim] = self.shape[diml]
                 stepl[dim] = 1
@@ -427,7 +422,7 @@ class Array(hdf5extension.Array, Leaf):
 
         # Compute the shape for the container properly. Fixes #1288792
         shape = []
-        for dim in xrange(len(self.shape)):
+        for dim in range(len(self.shape)):
             # The negative division operates differently with python scalars
             # and numpy scalars (which are similar to C conventions). See:
             # http://www.python.org/doc/faq/programming.html#why-does-22-10-return-3
@@ -439,7 +434,7 @@ class Array(hdf5extension.Array, Leaf):
             # Switch to `lrange` to allow long ranges (see #99).
             # use xrange, since it supports large integers as of Python 2.6
             # see github #181
-            new_dim = len(xrange(startl[dim], stopl[dim], stepl[dim]))
+            new_dim = len(range(startl[dim], stopl[dim], stepl[dim]))
             if not (new_dim == 1 and stop_None[dim]):
                 shape.append(new_dim)
 
@@ -463,7 +458,7 @@ class Array(hdf5extension.Array, Leaf):
             """Validate a list member for the given axis length."""
 
             try:
-                num = long(num)
+                num = int(num)
             except TypeError:
                 raise TypeError("Illegal index: %r" % num)
             if num > length - 1:
@@ -502,15 +497,15 @@ class Array(hdf5extension.Array, Leaf):
             if start is None:
                 start = 0
             else:
-                start = long(start)
+                start = int(start)
             if stop is None:
                 stop = length
             else:
-                stop = long(stop)
+                stop = int(stop)
             if step is None:
                 step = 1
             else:
-                step = long(step)
+                step = int(step)
 
             if step < 1:
                 raise IndexError("Step must be >= 1 (got %d)" % step)
@@ -574,7 +569,7 @@ class Array(hdf5extension.Array, Leaf):
                     else:
                         list_seen = True
                 else:
-                    if (not isinstance(exp[0], (int, long, numpy.integer)) or
+                    if (not isinstance(exp[0], (int, numpy.integer)) or
                         (isinstance(exp[0], numpy.ndarray) and not
                             numpy.issubdtype(exp[0].dtype, numpy.integer))):
                         raise TypeError("Only integer coordinates allowed.")
@@ -598,7 +593,7 @@ class Array(hdf5extension.Array, Leaf):
                     corrected_idx = sum(1 for x in mshape if x != 0) - 1
                     reorder = (corrected_idx, neworder)
                     nexp = nexp[neworder]
-                for select_idx in xrange(len(nexp) + 1):
+                for select_idx in range(len(nexp) + 1):
                     # This crazy piece of code performs a list selection
                     # using HDF5 hyperslabs.
                     # For each index, perform a "NOTB" selection on every
@@ -621,8 +616,6 @@ class Array(hdf5extension.Array, Leaf):
 
         mshape = tuple(x for x in mshape if x != 0)
         return selection, reorder, mshape
-
-    _fancySelection = previous_api(_fancy_selection)
 
     def __getitem__(self, key):
         """Get a row, a range of rows or a slice from the array.
@@ -753,8 +746,6 @@ class Array(hdf5extension.Array, Leaf):
         else:
             return nparr
 
-    _checkShape = previous_api(_check_shape)
-
     def _read_slice(self, startl, stopl, stepl, shape):
         """Read a slice based on `startl`, `stopl` and `stepl`."""
 
@@ -768,8 +759,6 @@ class Array(hdf5extension.Array, Leaf):
             nparr = nparr[()]
         return nparr
 
-    _readSlice = previous_api(_read_slice)
-
     def _read_coords(self, coords):
         """Read a set of points defined by `coords`."""
 
@@ -780,8 +769,6 @@ class Array(hdf5extension.Array, Leaf):
         if nparr.shape == ():
             nparr = nparr[()]
         return nparr
-
-    _readCoords = previous_api(_read_coords)
 
     def _read_selection(self, selection, reorder, shape):
         """Read a `selection`.
@@ -807,8 +794,6 @@ class Array(hdf5extension.Array, Leaf):
             nparr = nparr[k].copy()
         return nparr
 
-    _readSelection = previous_api(_read_selection)
-
     def _write_slice(self, startl, stopl, stepl, shape, nparr):
         """Write `nparr` in a slice based on `startl`, `stopl` and `stepl`."""
 
@@ -816,16 +801,12 @@ class Array(hdf5extension.Array, Leaf):
         countl = ((stopl - startl - 1) // stepl) + 1
         self._g_write_slice(startl, stepl, countl, nparr)
 
-    _writeSlice = previous_api(_write_slice)
-
     def _write_coords(self, coords, nparr):
         """Write `nparr` values in points defined by `coords` coordinates."""
 
         if len(coords) > 0:
             nparr = self._check_shape(nparr, (len(coords),))
             self._g_write_coords(coords, nparr)
-
-    _writeCoords = previous_api(_write_coords)
 
     def _write_selection(self, selection, reorder, shape, nparr):
         """Write `nparr` in `selection`.
@@ -845,12 +826,10 @@ class Array(hdf5extension.Array, Leaf):
             nparr = nparr[k].copy()
         self._g_write_selection(selection, nparr)
 
-    _writeSelection = previous_api(_write_selection)
-
     def _read(self, start, stop, step, out=None):
         """Read the array from disk without slice or flavor processing."""
 
-        nrowstoread = len(xrange(0, stop - start, step))
+        nrowstoread = len(range(start, stop, step))
         shape = list(self.shape)
         if shape:
             shape[self.maindim] = nrowstoread
@@ -937,8 +916,6 @@ class Array(hdf5extension.Array, Leaf):
 
         return (object_, nbytes)
 
-    _g_copyWithStats = previous_api(_g_copy_with_stats)
-
     def __repr__(self):
         """This provides more metainfo in addition to standard __str__"""
 
@@ -963,5 +940,3 @@ class ImageArray(Array):
 
     # Class identifier.
     _c_classid = 'IMAGE'
-
-    _c_classId = previous_api_property('_c_classid')

@@ -12,18 +12,18 @@ It also checks:
 """
 
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
 import hashlib
 import tempfile
 import warnings
-from distutils.version import LooseVersion
 
 import numpy
 
 import tables
 from tables import (
-    Group, Leaf, Table, Array, hdf5_version, Filters,
+    Group, Leaf, Table, Array, Filters,
     StringAtom, Int16Atom, Int64Atom, Float32Atom, Float64Atom,
     Col, StringCol, IntCol, Int16Col, FloatCol, Float32Col,
 )
@@ -31,11 +31,10 @@ from tables.parameters import MAX_COLUMNS
 from tables.hdf5extension import HAVE_DIRECT_DRIVER, HAVE_WINDOWS_DRIVER
 from tables.utils import quantize
 from tables.tests import common
-from tables.tests.common import unittest
+from tables.tests.common import unittest, hdf5_version, blosc_version
 from tables.tests.common import PyTablesTestCase as TestCase
+from six.moves import range
 
-
-hdf5_version = LooseVersion(hdf5_version)
 
 
 class Record(tables.IsDescription):
@@ -284,7 +283,7 @@ class FiltersTreeTestCase(common.TempFileMixin, TestCase):
             # Get the record object associated with the new table
             d = table.row
             # Fill the table
-            for i in xrange(self.nrows):
+            for i in range(self.nrows):
                 d['var1'] = '%04d' % (self.nrows - i)
                 d['var2'] = i
                 d['var3'] = i * 2
@@ -657,6 +656,24 @@ class FiltersCaseBloscZlib(FiltersTreeTestCase):
     gfilters = Filters(complevel=5, shuffle=True, complib="blosc:zlib")
     open_kwargs = dict(filters=filters)
 
+@unittest.skipIf(not common.blosc_avail,
+                 'BLOSC compression library not available')
+@unittest.skipIf('zstd' not in tables.blosc_compressor_list(), 'zstd required')
+class FiltersCaseBloscZstd(FiltersTreeTestCase):
+    filters = Filters(shuffle=False, complevel=1, complib="blosc:zstd")
+    gfilters = Filters(complevel=5, shuffle=True, complib="blosc:zstd")
+    open_kwargs = dict(filters=filters)
+
+@unittest.skipIf(not common.blosc_avail,
+                 'BLOSC compression library not available')
+@unittest.skipIf(blosc_version < common.min_blosc_bitshuffle_version,
+                 'BLOSC >= %s required' % common.min_blosc_bitshuffle_version)
+class FiltersCaseBloscBitShuffle(FiltersTreeTestCase):
+    filters = Filters(shuffle=False, complevel=1, complib="blosc:blosclz")
+    gfilters = Filters(complevel=5, shuffle=False, bitshuffle=True, complib="blosc:blosclz")
+    open_kwargs = dict(filters=filters)
+    print("version:", tables.which_lib_version("blosc")[1])
+
 
 class CopyGroupTestCase(common.TempFileMixin, TestCase):
     title = "A title"
@@ -691,7 +708,7 @@ class CopyGroupTestCase(common.TempFileMixin, TestCase):
                 # Get the record object associated with the new table
                 d = table.row
                 # Fill the table
-                for i in xrange(self.nrows):
+                for i in range(self.nrows):
                     d['var1'] = '%04d' % (self.nrows - i)
                     d['var2'] = i
                     d['var3'] = i * 2
@@ -762,8 +779,8 @@ class CopyGroupTestCase(common.TempFileMixin, TestCase):
 
         # Check that the copy has been done correctly
         dstgroup = self.h5file2.root
-        nodelist1 = srcgroup._v_children.keys()
-        nodelist2 = dstgroup._v_children.keys()
+        nodelist1 = list(srcgroup._v_children.keys())
+        nodelist2 = list(dstgroup._v_children.keys())
         # Sort the lists
         nodelist1.sort()
         nodelist2.sort()
@@ -1033,7 +1050,7 @@ class CopyFileTestCase(common.TempFileMixin, TestCase):
                 # Get the record object associated with the new table
                 d = table.row
                 # Fill the table
-                for i in xrange(self.nrows):
+                for i in range(self.nrows):
                     d['var1'] = '%04d' % (self.nrows - i)
                     d['var2'] = i
                     d['var3'] = i * 2
@@ -1112,8 +1129,8 @@ class CopyFileTestCase(common.TempFileMixin, TestCase):
         # Check that the copy has been done correctly
         srcgroup = self.h5file.root
         dstgroup = self.h5file2.root
-        nodelist1 = srcgroup._v_children.keys()
-        nodelist2 = dstgroup._v_children.keys()
+        nodelist1 = list(srcgroup._v_children.keys())
+        nodelist2 = list(dstgroup._v_children.keys())
         # Sort the lists
         nodelist1.sort()
         nodelist2.sort()
@@ -1156,8 +1173,8 @@ class CopyFileTestCase(common.TempFileMixin, TestCase):
         # Check that the copy has been done correctly
         srcgroup = self.h5file.root
         dstgroup = self.h5file2.root
-        nodelist1 = srcgroup._v_children.keys()
-        nodelist2 = dstgroup._v_children.keys()
+        nodelist1 = list(srcgroup._v_children.keys())
+        nodelist2 = list(dstgroup._v_children.keys())
 
         # Sort the lists
         nodelist1.sort()
@@ -1191,8 +1208,8 @@ class CopyFileTestCase(common.TempFileMixin, TestCase):
         # Check that the copy has been done correctly
         srcgroup = self.h5file.root
         dstgroup = self.h5file2.root
-        nodelist1 = srcgroup._v_children.keys()
-        nodelist2 = dstgroup._v_children.keys()
+        nodelist1 = list(srcgroup._v_children.keys())
+        nodelist2 = list(dstgroup._v_children.keys())
 
         # Sort the lists
         nodelist1.sort()
@@ -1521,7 +1538,7 @@ class FilterTestCase(TestCase):
         if sys.version_info[0] > 2:
             return hex(int(n))
         else:
-            return hex(long(n)).rstrip('L')
+            return hex(int(n)).rstrip('L')
 
     def test_filter_pack_01(self):
         filter_ = Filters()
@@ -2238,7 +2255,7 @@ class InMemoryCoreDriverTestCase(TestCase):
         self.assertEqual(self.h5file.get_node_attr("/table", "TITLE"), "Table")
         self.assertEqual(self.h5file.root.array.read(), [1, 2])
 
-        self.h5file.create_array(self.h5file.root, 'array2', range(10000),
+        self.h5file.create_array(self.h5file.root, 'array2', list(range(10000)),
                                  title="Array2")
         self.h5file.root._v_attrs.testattr2 = 42
 
@@ -2268,7 +2285,7 @@ class InMemoryCoreDriverTestCase(TestCase):
         self.assertEqual(self.h5file.get_node_attr("/table", "TITLE"), "Table")
         self.assertEqual(self.h5file.root.array.read(), [1, 2])
 
-        data = range(2 * tables.parameters.DRIVER_CORE_INCREMENT)
+        data = list(range(2 * tables.parameters.DRIVER_CORE_INCREMENT))
         self.h5file.create_array(self.h5file.root, 'array2', data,
                                  title="Array2")
         self.h5file.root._v_attrs.testattr2 = 42
@@ -2357,7 +2374,7 @@ class InMemoryCoreDriverTestCase(TestCase):
         self.assertEqual(self.h5file.get_node_attr("/table", "TITLE"), "Table")
         self.assertEqual(self.h5file.root.array.read(), [1, 2])
 
-        data = range(2 * tables.parameters.DRIVER_CORE_INCREMENT)
+        data = list(range(2 * tables.parameters.DRIVER_CORE_INCREMENT))
         self.h5file.create_array(self.h5file.root, 'array2', data,
                                  title="Array2")
         self.h5file.root._v_attrs.testattr2 = 42
@@ -2430,8 +2447,8 @@ class QuantizeTestCase(common.TempFileMixin, TestCase):
 
         self.data = numpy.linspace(-5., 5., 41)
         self.randomdata = numpy.random.random_sample(1000000)
-        self.randomints = numpy.random.random_integers(
-            -1000000, 1000000, 1000000).astype('int64')
+        self.randomints = numpy.random.randint(-1000000, 1000000,
+                                               1000000).astype('int64')
 
         self.populateFile()
         self.h5file.close()
@@ -2544,6 +2561,8 @@ def suite():
         theSuite.addTest(unittest.makeSuite(FiltersCaseBloscLZ4HC))
         theSuite.addTest(unittest.makeSuite(FiltersCaseBloscSnappy))
         theSuite.addTest(unittest.makeSuite(FiltersCaseBloscZlib))
+        theSuite.addTest(unittest.makeSuite(FiltersCaseBloscZstd))
+        theSuite.addTest(unittest.makeSuite(FiltersCaseBloscBitShuffle))
         theSuite.addTest(unittest.makeSuite(CopyGroupCase1))
         theSuite.addTest(unittest.makeSuite(CopyGroupCase2))
         theSuite.addTest(unittest.makeSuite(CopyFileCase1))

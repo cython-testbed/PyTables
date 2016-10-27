@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 
 import numpy
@@ -11,8 +12,9 @@ from tables import (
     FloatAtom, Float64Atom,
 )
 from tables.tests import common
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+from six.moves import range
 
 
 # Test Record class
@@ -152,7 +154,7 @@ class DtypeTestCase(common.TempFileMixin, TestCase):
 
 
 class ReadFloatTestCase(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename("float.h5")
+    h5fname = test_filename("float.h5")
     nrows = 5
     ncols = 6
 
@@ -268,6 +270,13 @@ class AtomTestCase(TestCase):
         self.assertEqual(str(atom1), str(atom2))
 
     def test_from_dtype_03(self):
+        with self.assertWarns(Warning):
+            atom1 = Atom.from_dtype(numpy.dtype('U5'), dflt=b'hello')
+        atom2 = StringAtom(itemsize=5, shape=(), dflt=b'hello')
+        self.assertEqual(atom1, atom2)
+        self.assertEqual(str(atom1), str(atom2))
+
+    def test_from_dtype_04(self):
         atom1 = Atom.from_dtype(numpy.dtype('Float64'))
         atom2 = Float64Atom(shape=(), dflt=0.0)
         self.assertEqual(atom1, atom2)

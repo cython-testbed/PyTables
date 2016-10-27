@@ -58,8 +58,6 @@ from tables.utilsextension import (encode_filename, set_blosc_max_threads,
   pttype_to_hdf5, pt_special_kinds, npext_prefixes_to_ptkinds, hdf5_class_to_string,
   platform_byteorder)
 
-from tables._past import previous_api
-
 
 # Types, constants, functions, classes & other objects from everywhere
 from libc.stdlib cimport malloc, free
@@ -101,11 +99,12 @@ from definitions cimport (const_char, uintptr_t, hid_t, herr_t, hsize_t, hvl_t,
   get_len_of_range, conv_float64_timeval32, truncate_dset,
   H5_HAVE_DIRECT_DRIVER, pt_H5Pset_fapl_direct,
   H5_HAVE_WINDOWS_DRIVER, pt_H5Pset_fapl_windows,
-  H5_HAVE_IMAGE_FILE, pt_H5Pset_file_image, pt_H5Fget_file_image)
+  H5_HAVE_IMAGE_FILE, pt_H5Pset_file_image, pt_H5Fget_file_image,
+  H5Tget_size, hobj_ref_t)
 
 cdef int H5T_CSET_DEFAULT = 16
 
-from utilsextension cimport malloc_dims, get_native_type, cstr_to_pystr
+from utilsextension cimport malloc_dims, get_native_type, cstr_to_pystr, load_reference
 
 
 #-------------------------------------------------------------------
@@ -603,20 +602,17 @@ cdef class File:
     descriptor = <uintptr_t *>file_handle
     return descriptor[0]
 
-  _getFileId = previous_api(_get_file_id)
 
   def _flush_file(self, scope):
     # Close the file
     H5Fflush(self.file_id, scope)
 
-  _flushFile = previous_api(_flush_file)
 
   def _close_file(self):
     # Close the file
     H5Fclose( self.file_id )
     self.file_id = 0    # Means file closed
 
-  _closeFile = previous_api(_close_file)
 
   # This method is moved out of scope, until we provide code to delete
   # the memory booked by this extension types
@@ -640,7 +636,6 @@ cdef class AttributeSet:
     a = Aiterate(node._v_objectid)
     return a
 
-  _g_listAttr = previous_api(_g_list_attr)
 
   def _g_setattr(self, node, name, object value):
     """Save Python or NumPy objects as HDF5 attributes.
@@ -715,7 +710,6 @@ cdef class AttributeSet:
         raise HDF5ExtError("Can't set attribute '%s' in node:\n %s." %
                            (name, self._v_node))
 
-  _g_setAttr = previous_api(_g_setattr)
 
   # Get attributes
   def _g_getattr(self, node, attrname):
@@ -880,7 +874,6 @@ cdef class AttributeSet:
 
     return retvalue
 
-  _g_getAttr = previous_api(_g_getattr)
 
   def _g_remove(self, node, attrname):
     cdef int ret
@@ -1015,7 +1008,6 @@ cdef class Group(Node):
 
     return Giterate(parent._v_objectid, self._v_objectid, encoded_name)
 
-  _g_listGroup = previous_api(_g_list_group)
 
   def _g_get_gchild_attr(self, group_name, attr_name):
     """Return an attribute of a child `Group`.
@@ -1044,7 +1036,6 @@ cdef class Group(Node):
 
     return retvalue
 
-  _g_getGChildAttr = previous_api(_g_get_gchild_attr)
 
   def _g_get_lchild_attr(self, leaf_name, attr_name):
     """Return an attribute of a child `Leaf`.
@@ -1071,13 +1062,11 @@ cdef class Group(Node):
     H5Dclose(leaf_id)
     return retvalue
 
-  _g_getLChildAttr = previous_api(_g_get_lchild_attr)
 
   def _g_flush_group(self):
     # Close the group
     H5Fflush(self.group_id, H5F_SCOPE_GLOBAL)
 
-  _g_flushGroup = previous_api(_g_flush_group)
 
   def _g_close_group(self):
     cdef int ret
@@ -1087,7 +1076,6 @@ cdef class Group(Node):
       raise HDF5ExtError("Problems closing the Group %s" % self.name)
     self.group_id = 0  # indicate that this group is closed
 
-  _g_closeGroup = previous_api(_g_close_group)
 
   def _g_move_node(self, hid_t oldparent, oldname, hid_t newparent, newname,
                    oldpathname, newpathname):
@@ -1104,7 +1092,6 @@ cdef class Group(Node):
                          (oldpathname, newpathname) )
     return ret
 
-  _g_moveNode = previous_api(_g_move_node)
 
 
 cdef class Leaf(Node):
@@ -1134,7 +1121,7 @@ cdef class Leaf(Node):
 
     disk_type_id = H5Dget_type(self.dataset_id)
     native_type_id = get_native_type(disk_type_id)
-    return (disk_type_id, native_type_id)
+    return disk_type_id, native_type_id
 
   cdef _convert_time64(self, ndarray nparr, int sense):
     """Converts a NumPy of Time64 elements between NumPy and HDF5 formats.
@@ -1164,7 +1151,6 @@ cdef class Leaf(Node):
       t64buf, byteoffset, bytestride, nrecords, nelements, sense)
 
   # can't do since cdef'd
-  #_convertTime64 = previous_api(_convert_time64)
 
   def _g_truncate(self, hsize_t size):
     """Truncate a Leaf to `size` nrows."""
@@ -1252,7 +1238,7 @@ cdef class Array(Leaf):
                                   self.rank, self.dims,
                                   self.extdim, self.disk_type_id, NULL, NULL,
                                   self.filters.complevel, complib,
-                                  self.filters.shuffle,
+                                  self.filters.shuffle_bitshuffle,
                                   self.filters.fletcher32,
                                   rbuf)
     if self.dataset_id < 0:
@@ -1273,9 +1259,8 @@ cdef class Array(Leaf):
     # with non-native byteorders on-disk)
     self.type_id = get_native_type(self.disk_type_id)
 
-    return (self.dataset_id, shape, atom_)
+    return self.dataset_id, shape, atom_
 
-  _createArray = previous_api(_create_array)
 
   def _create_carray(self, object title):
     cdef int i
@@ -1323,7 +1308,7 @@ cdef class Array(Leaf):
       self.parent_id, encoded_name, version, self.rank,
       self.dims, self.extdim, self.disk_type_id, self.dims_chunk,
       fill_data, self.filters.complevel, complib,
-      self.filters.shuffle, self.filters.fletcher32, rbuf)
+      self.filters.shuffle_bitshuffle, self.filters.fletcher32, rbuf)
     if self.dataset_id < 0:
       raise HDF5ExtError("Problems creating the %s." % self.__class__.__name__)
 
@@ -1347,7 +1332,6 @@ cdef class Array(Leaf):
 
     return self.dataset_id
 
-  _createCArray = previous_api(_create_carray)
 
   def _open_array(self):
     cdef size_t type_size, type_precision
@@ -1409,33 +1393,37 @@ cdef class Array(Leaf):
       # Get the chunkshape as a python tuple
       chunkshapes = getshape(self.rank, self.dims_chunk)
 
-    # Get the fill value
-    dflts = numpy.zeros((), dtype=atom.dtype)
-    fill_data = dflts.data
-    H5ARRAYget_fill_value(self.dataset_id, self.type_id,
-                          &fill_status, fill_data);
-    if fill_status == H5D_FILL_VALUE_UNDEFINED:
-      # This can only happen with datasets created with other libraries
-      # than PyTables.
-      dflts = None
-    if dflts is not None and atom.shape == ():
-      # The default is preferred as a scalar value instead of 0-dim array
-      atom.dflt = dflts[()]
-    else:
-      atom.dflt = dflts
+    # object arrays should not be read directly into memory
+    if atom.dtype != numpy.object:
+      # Get the fill value
+      dflts = numpy.zeros((), dtype=atom.dtype)
+      fill_data = dflts.data
+      H5ARRAYget_fill_value(self.dataset_id, self.type_id,
+                            &fill_status, fill_data);
+      if fill_status == H5D_FILL_VALUE_UNDEFINED:
+        # This can only happen with datasets created with other libraries
+        # than PyTables.
+        dflts = None
+      if dflts is not None and atom.shape == ():
+        # The default is preferred as a scalar value instead of 0-dim array
+        atom.dflt = dflts[()]
+      else:
+        atom.dflt = dflts
 
     # Get the byteorder
     self.byteorder = correct_byteorder(atom.type, byteorder)
 
-    return (self.dataset_id, atom, shape, chunkshapes)
+    return self.dataset_id, atom, shape, chunkshapes
 
-  _openArray = previous_api(_open_array)
 
   def _append(self, ndarray nparr):
     cdef int ret, extdim
     cdef hsize_t *dims_arr
     cdef void *rbuf
     cdef object shape
+
+    if self.atom.kind == "reference":
+      raise ValueError("Cannot append to the reference types")
 
     # Allocate space for the dimension axis info
     dims_arr = npy_malloc_dims(self.rank, nparr.shape)
@@ -1466,12 +1454,19 @@ cdef class Array(Leaf):
     cdef void *rbuf
     cdef hsize_t nrows
     cdef int extdim
-
-    # Get the pointer to the buffer data area
-    rbuf = nparr.data
+    cdef size_t item_size = H5Tget_size(self.type_id)
+    cdef void * refbuf = NULL
 
     # Number of rows to read
     nrows = get_len_of_range(start, stop, step)
+
+    # Get the pointer to the buffer data area
+    if self.atom.kind == "reference":
+      refbuf = malloc(nrows * item_size)
+      rbuf = refbuf
+    else:
+      rbuf = nparr.data
+
     if hasattr(self, "extdim"):
       extdim = self.extdim
     else:
@@ -1482,8 +1477,17 @@ cdef class Array(Leaf):
         ret = H5ARRAYread(self.dataset_id, self.type_id, start, nrows, step,
                           extdim, rbuf)
 
-    if ret < 0:
-      raise HDF5ExtError("Problems reading the array data.")
+    try:
+      if ret < 0:
+        raise HDF5ExtError("Problems reading the array data.")
+
+      # Get the pointer to the buffer data area
+      if self.atom.kind == "reference":
+        load_reference(self.dataset_id, <hobj_ref_t *>rbuf, item_size, nparr)
+    finally:
+      if refbuf:
+        free(refbuf)
+        refbuf = NULL
 
     if self.atom.kind == 'time':
       # Swap the byteorder by hand (this is not currently supported by HDF5)
@@ -1496,7 +1500,6 @@ cdef class Array(Leaf):
 
     return
 
-  _readArray = previous_api(_read_array)
 
   def _g_read_slice(self, ndarray startl, ndarray stopl, ndarray stepl,
                    ndarray nparr):
@@ -1505,21 +1508,36 @@ cdef class Array(Leaf):
     cdef hsize_t *stop
     cdef hsize_t *step
     cdef void *rbuf
+    cdef size_t item_size = H5Tget_size(self.type_id)
+    cdef void * refbuf = NULL
 
     # Get the pointer to the buffer data area of startl, stopl and stepl arrays
     start = <hsize_t *>startl.data
     stop = <hsize_t *>stopl.data
     step = <hsize_t *>stepl.data
+
     # Get the pointer to the buffer data area
-    rbuf = nparr.data
+    if self.atom.kind == "reference":
+      refbuf = malloc(nparr.size * item_size)
+      rbuf = refbuf
+    else:
+      rbuf = nparr.data
 
     # Do the physical read
     with nogil:
         ret = H5ARRAYreadSlice(self.dataset_id, self.type_id,
                                start, stop, step, rbuf)
+    try:
+      if ret < 0:
+        raise HDF5ExtError("Problems reading the array data.")
 
-    if ret < 0:
-      raise HDF5ExtError("Problems reading the array data.")
+      # Get the pointer to the buffer data area
+      if self.atom.kind == "reference":
+        load_reference(self.dataset_id, <hobj_ref_t *>rbuf, item_size, nparr)
+    finally:
+      if refbuf:
+        free(refbuf)
+        refbuf = NULL
 
     if self.atom.kind == 'time':
       # Swap the byteorder by hand (this is not currently supported by HDF5)
@@ -1532,7 +1550,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_readSlice = previous_api(_g_read_slice)
 
   def _g_read_coords(self, ndarray coords, ndarray nparr):
     """Read coordinates in an already created NumPy array."""
@@ -1543,6 +1560,8 @@ cdef class Array(Leaf):
     cdef hsize_t size
     cdef void *rbuf
     cdef object mode
+    cdef size_t item_size = H5Tget_size(self.type_id)
+    cdef void * refbuf = NULL
 
     # Get the dataspace handle
     space_id = H5Dget_space(self.dataset_id)
@@ -1555,15 +1574,28 @@ cdef class Array(Leaf):
                        <size_t>size, <hsize_t *>coords.data)
 
     # Get the pointer to the buffer data area
-    rbuf = nparr.data
+    if self.atom.kind == "reference":
+      refbuf = malloc(nparr.size * item_size)
+      rbuf = refbuf
+    else:
+      rbuf = nparr.data
 
     # Do the actual read
     with nogil:
         ret = H5Dread(self.dataset_id, self.type_id, mem_space_id, space_id,
                       H5P_DEFAULT, rbuf)
 
-    if ret < 0:
-      raise HDF5ExtError("Problems reading the array data.")
+    try:
+      if ret < 0:
+        raise HDF5ExtError("Problems reading the array data.")
+
+      # Get the pointer to the buffer data area
+      if self.atom.kind == "reference":
+        load_reference(self.dataset_id, <hobj_ref_t *>rbuf, item_size, nparr)
+    finally:
+      if refbuf:
+        free(refbuf)
+        refbuf = NULL
 
     # Terminate access to the memory dataspace
     H5Sclose(mem_space_id)
@@ -1581,7 +1613,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_readCoords = previous_api(_g_read_coords)
 
   def perform_selection(self, space_id, start, count, step, idx, mode):
     """Performs a selection using start/count/step in the given axis.
@@ -1635,6 +1666,8 @@ cdef class Array(Leaf):
     cdef hsize_t size
     cdef void *rbuf
     cdef object mode
+    cdef size_t item_size = H5Tget_size(self.type_id)
+    cdef void * refbuf = NULL
 
     # Get the dataspace handle
     space_id = H5Dget_space(self.dataset_id)
@@ -1650,15 +1683,28 @@ cdef class Array(Leaf):
       self.perform_selection(space_id, *args)
 
     # Get the pointer to the buffer data area
-    rbuf = nparr.data
+    if self.atom.kind == "reference":
+      refbuf = malloc(nparr.size * item_size)
+      rbuf = refbuf
+    else:
+      rbuf = nparr.data
 
     # Do the actual read
     with nogil:
         ret = H5Dread(self.dataset_id, self.type_id, mem_space_id, space_id,
                       H5P_DEFAULT, rbuf)
 
-    if ret < 0:
-      raise HDF5ExtError("Problems reading the array data.")
+    try:
+      if ret < 0:
+        raise HDF5ExtError("Problems reading the array data.")
+
+      # Get the pointer to the buffer data area
+      if self.atom.kind == "reference":
+        load_reference(self.dataset_id, <hobj_ref_t *>rbuf, item_size, nparr)
+    finally:
+      if refbuf:
+        free(refbuf)
+        refbuf = NULL
 
     # Terminate access to the memory dataspace
     H5Sclose(mem_space_id)
@@ -1676,7 +1722,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_readSelection = previous_api(_g_read_selection)
 
   def _g_write_slice(self, ndarray startl, ndarray stepl, ndarray countl,
                     ndarray nparr):
@@ -1689,6 +1734,8 @@ cdef class Array(Leaf):
     cdef hsize_t *step
     cdef hsize_t *count
 
+    if self.atom.kind == "reference":
+      raise ValueError("Cannot write reference types yet")
     # Get the pointer to the buffer data area
     rbuf = nparr.data
     # Get the start, step and count values
@@ -1711,7 +1758,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_writeSlice = previous_api(_g_write_slice)
 
   def _g_write_coords(self, ndarray coords, ndarray nparr):
     """Write a selection in an already created NumPy array."""
@@ -1723,6 +1769,8 @@ cdef class Array(Leaf):
     cdef void *rbuf
     cdef object mode
 
+    if self.atom.kind == "reference":
+      raise ValueError("Cannot write reference types yet")
     # Get the dataspace handle
     space_id = H5Dget_space(self.dataset_id)
     # Create a memory dataspace handle
@@ -1755,7 +1803,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_writeCoords = previous_api(_g_write_coords)
 
   def _g_write_selection(self, object selection, ndarray nparr):
     """Write a selection in an already created NumPy array."""
@@ -1767,6 +1814,8 @@ cdef class Array(Leaf):
     cdef void *rbuf
     cdef object mode
 
+    if self.atom.kind == "reference":
+      raise ValueError("Cannot write reference types yet")
     # Get the dataspace handle
     space_id = H5Dget_space(self.dataset_id)
     # Create a memory dataspace handle
@@ -1802,7 +1851,6 @@ cdef class Array(Leaf):
 
     return
 
-  _g_writeSelection = previous_api(_g_write_selection)
 
   def __dealloc__(self):
     if self.dims:
@@ -1854,7 +1902,7 @@ cdef class VLArray(Leaf):
                                     rank, dims, self.base_type_id,
                                     self.chunkshape[0], rbuf,
                                     self.filters.complevel, complib,
-                                    self.filters.shuffle,
+                                    self.filters.shuffle_bitshuffle,
                                     self.filters.fletcher32,
                                     rbuf)
     if dims:
@@ -1879,7 +1927,6 @@ cdef class VLArray(Leaf):
 
     return self.dataset_id
 
-  _createArray = previous_api(_create_array)
 
   def _open_array(self):
     cdef char cbyteorder[11]  # "irrelevant" fits easily here
@@ -1924,7 +1971,6 @@ cdef class VLArray(Leaf):
     self.nrecords = nrecords  # Initialize the number of records saved
     return self.dataset_id, SizeType(nrecords), (SizeType(chunksize),), atom
 
-  _openArray = previous_api(_open_array)
 
   def _append(self, ndarray nparr, int nobjects):
     cdef int ret
@@ -2074,7 +2120,6 @@ cdef class VLArray(Leaf):
 
     return datalist
 
-  _readArray = previous_api(_read_array)
 
   def get_row_size(self, row):
     """Return the total size in bytes of all the elements contained in a given row."""

@@ -13,6 +13,7 @@
 """Utility functions."""
 
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
 import warnings
@@ -21,8 +22,8 @@ from time import time
 
 import numpy
 
-from tables.flavor import array_of_flavor
-from tables._past import previous_api
+from .flavor import array_of_flavor
+import six
 
 # The map between byteorders in NumPy and PyTables
 byteorders = {
@@ -40,7 +41,7 @@ SizeType = numpy.int64
 def correct_byteorder(ptype, byteorder):
     """Fix the byteorder depending on the PyTables types."""
 
-    if ptype in ['string', 'bool', 'int8', 'uint8']:
+    if ptype in ['string', 'bool', 'int8', 'uint8', 'object']:
         return "irrelevant"
     else:
         return byteorder
@@ -49,7 +50,7 @@ def correct_byteorder(ptype, byteorder):
 def is_idx(index):
     """Checks if an object can work as an index or not."""
 
-    if type(index) in (int, long):
+    if type(index) in six.integer_types:
         return True
     elif hasattr(index, "__index__"):  # Only works on Python 2.5 (PEP 357)
         # Exclude the array([idx]) as working as an index.  Fixes #303.
@@ -78,7 +79,7 @@ def idx2long(index):
     """Convert a possible index into a long int."""
 
     try:
-        return long(index)
+        return int(index)
     except:
         raise TypeError("not an integer type.")
 
@@ -113,7 +114,6 @@ def convert_to_np_atom(arr, atom, copy=False):
         nparr = nparr2.view(atom.dtype)
     return nparr
 
-convertToNPAtom = previous_api(convert_to_np_atom)
 
 
 # The next is used in Array, EArray and VLArray, and it is a bit more
@@ -134,7 +134,6 @@ def convert_to_np_atom2(object, atom):
 
     return nparr
 
-convertToNPAtom2 = previous_api(convert_to_np_atom2)
 
 
 def check_file_access(filename, mode='r'):
@@ -191,7 +190,6 @@ def check_file_access(filename, mode='r'):
     else:
         raise ValueError("invalid mode: %r" % (mode,))
 
-checkFileAccess = previous_api(check_file_access)
 
 
 def lazyattr(fget):
@@ -318,12 +316,11 @@ def log_instance_creation(instance, name=None):
             tracked_classes[name] = []
         tracked_classes[name].append(weakref.ref(instance))
 
-logInstanceCreation = previous_api(log_instance_creation)
 
 
 def string_to_classes(s):
     if s == '*':
-        c = sorted(tracked_classes.iterkeys())
+        c = sorted(six.iterkeys(tracked_classes))
         return c
     else:
         return s.split()
@@ -333,14 +330,12 @@ def fetch_logged_instances(classes="*"):
     classnames = string_to_classes(classes)
     return [(cn, len(tracked_classes[cn])) for cn in classnames]
 
-fetchLoggedInstances = previous_api(fetch_logged_instances)
 
 
 def count_logged_instances(classes, file=sys.stdout):
     for classname in string_to_classes(classes):
         file.write("%s: %d\n" % (classname, len(tracked_classes[classname])))
 
-countLoggedInstances = previous_api(count_logged_instances)
 
 
 def list_logged_instances(classes, file=sys.stdout):
@@ -351,7 +346,6 @@ def list_logged_instances(classes, file=sys.stdout):
             if obj is not None:
                 file.write('    %s\n' % repr(obj))
 
-listLoggedInstances = previous_api(list_logged_instances)
 
 
 def dump_logged_instances(classes, file=sys.stdout):
@@ -361,10 +355,9 @@ def dump_logged_instances(classes, file=sys.stdout):
             obj = ref()
             if obj is not None:
                 file.write('    %s:\n' % obj)
-                for key, value in obj.__dict__.iteritems():
+                for key, value in six.iteritems(obj.__dict__):
                     file.write('        %20s : %s\n' % (key, value))
 
-dumpLoggedInstances = previous_api(dump_logged_instances)
 
 
 #
@@ -382,7 +375,7 @@ class CacheDict(dict):
         if len(self) > self.maxentries:
             # Remove a 10% of (arbitrary) elements from the cache
             entries_to_remove = self.maxentries / 10
-            for k in self.keys()[:entries_to_remove]:
+            for k in list(self.keys())[:entries_to_remove]:
                 super(CacheDict, self).__delitem__(k)
         super(CacheDict, self).__setitem__(key, value)
 
@@ -436,7 +429,7 @@ class NailedDict(object):
         if len(cache) > self.maxentries:
             # Remove a 10% of (arbitrary) elements from the cache
             entries_to_remove = max(self.maxentries // 10, 1)
-            for k in cache.keys()[:entries_to_remove]:
+            for k in list(cache.keys())[:entries_to_remove]:
                 del cache[k]
         cache[key] = value
 
@@ -464,7 +457,6 @@ def detect_number_of_cores():
             return ncpus
     return 1  # Default
 
-detectNumberOfCores = previous_api(detect_number_of_cores)
 
 
 # Main part

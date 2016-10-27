@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 
 import os
 import sys
@@ -16,8 +17,9 @@ from tables import Atom, ClosedNodeError, NoSuchNodeError
 from tables.utils import byteorders
 from tables.tests import common
 from tables.tests.common import allequal
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+from six.moves import range
 
 
 warnings.resetwarnings()
@@ -2279,7 +2281,7 @@ class FancySelectionTestCase(common.TempFileMixin, TestCase):
         # Create a sample array
         nparr = numpy.empty(self.shape, dtype=numpy.int32)
         data = numpy.arange(N * O, dtype=numpy.int32).reshape(N, O)
-        for i in xrange(M):
+        for i in range(M):
             nparr[i] = data * i
         self.nparr = nparr
         self.tbarr = self.h5file.create_array(self.h5file.root, 'array', nparr)
@@ -2394,7 +2396,7 @@ class CopyNativeHDF5MDAtom(TestCase):
 
     def setUp(self):
         super(CopyNativeHDF5MDAtom, self).setUp()
-        filename = self._testFilename("array_mdatom.h5")
+        filename = test_filename("array_mdatom.h5")
         self.h5file = tables.open_file(filename, "r")
         self.arr = self.h5file.root.arr
         self.copy = tempfile.mktemp(".h5")

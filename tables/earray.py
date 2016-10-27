@@ -11,13 +11,14 @@
 ########################################################################
 
 """Here is defined the EArray class."""
+from __future__ import absolute_import
 
 import numpy
 
-from tables.utils import convert_to_np_atom2, SizeType
-from tables.carray import CArray
+from .utils import convert_to_np_atom2, SizeType
+from .carray import CArray
+from six.moves import range
 
-from tables._past import previous_api, previous_api_property
 
 # default version for EARRAY objects
 # obversion = "1.0"    # initial version
@@ -130,7 +131,6 @@ class EArray(CArray):
     # Class identifier.
     _c_classid = 'EARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
 
     # Special methods
     # ~~~~~~~~~~~~~~~
@@ -188,7 +188,6 @@ class EArray(CArray):
                                   "``%s`` EArray differ in non-enlargeable "
                                   "dimension %d") % (self._v_pathname, i))
 
-    _checkShapeAppend = previous_api(_check_shape_append)
 
     def append(self, sequence):
         """Add a sequence of data to the end of the dataset.
@@ -223,7 +222,7 @@ class EArray(CArray):
         shape = list(self.shape)
         shape[maindim] = 0
         # The number of final rows
-        nrows = len(xrange(0, stop - start, step))
+        nrows = len(range(start, stop, step))
         # Build the new EArray object
         object = EArray(
             group, name, atom=self.atom, shape=shape, title=title,
@@ -237,7 +236,7 @@ class EArray(CArray):
         # when copying buffers
         self._v_convert = False
         # Start the copy itself
-        for start2 in xrange(start, stop, step * nrowsinbuf):
+        for start2 in range(start, stop, step * nrowsinbuf):
             # Save the records on disk
             stop2 = start2 + step * nrowsinbuf
             if stop2 > stop:
@@ -251,7 +250,6 @@ class EArray(CArray):
 
         return (object, nbytes)
 
-    _g_copyWithStats = previous_api(_g_copy_with_stats)
 
 ## Local Variables:
 ## mode: python

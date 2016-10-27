@@ -11,21 +11,23 @@
 ########################################################################
 
 """Here is defined the VLArray class."""
+from __future__ import absolute_import
 
 import operator
 import sys
-
 import numpy
 
-from tables import hdf5extension
-from tables.utils import (convert_to_np_atom, convert_to_np_atom2, idx2long,
-                          correct_byteorder, SizeType, is_idx, lazyattr)
+from . import hdf5extension
+from .atom import ObjectAtom, VLStringAtom, VLUnicodeAtom
+from .flavor import internal_to_flavor
+from .leaf import Leaf, calc_chunksize
+from .utils import (
+    convert_to_np_atom, convert_to_np_atom2, idx2long, correct_byteorder,
+    SizeType, is_idx, lazyattr)
 
-
-from tables.atom import ObjectAtom, VLStringAtom, VLUnicodeAtom
-from tables.flavor import internal_to_flavor
-from tables.leaf import Leaf, calc_chunksize
-from tables._past import previous_api, previous_api_property
+from six.moves import range
+from six.moves import zip
+import six
 
 # default version for VLARRAY objects
 # obversion = "1.0"    # initial version
@@ -36,7 +38,7 @@ from tables._past import previous_api, previous_api_property
 obversion = "1.4"    # Numeric and numarray flavors are gone.
 
 
-class VLArray(hdf5extension.VLArray, Leaf):
+class VLArray(hdf5extension.VLArray, Leaf, six.Iterator):
     """This class represents variable length (ragged) arrays in an HDF5 file.
 
     Instances of this class represent array objects in the object tree
@@ -204,8 +206,6 @@ class VLArray(hdf5extension.VLArray, Leaf):
     # Class identifier.
     _c_classid = 'VLARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
-
     # Lazy read-only attributes
     # `````````````````````````
     @lazyattr
@@ -215,22 +215,23 @@ class VLArray(hdf5extension.VLArray, Leaf):
 
     # Properties
     # ~~~~~~~~~~
-    shape = property(
-        lambda self: (self.nrows,), None, None,
-        "The shape of the stored array.")
 
-    def _get_size_on_disk(self):
-        raise NotImplementedError('size_on_disk not implemented for VLArrays')
+    @property
+    def shape(self):
+        "The shape of the stored array."
+        return (self.nrows,)
 
-    size_on_disk = property(_get_size_on_disk, None, None,
-                            """
+    @property
+    def size_on_disk(self):
+        """
         The HDF5 library does not include a function to determine size_on_disk
         for variable-length arrays.  Accessing this attribute will raise a
         NotImplementedError.
-        """)
+        """
+        raise NotImplementedError('size_on_disk not implemented for VLArrays')
 
-    size_in_memory = property(
-        lambda self: self._get_memory_size(), None, None,
+    @property
+    def size_in_memory(self):
         """
         The size of this array's data in bytes when it is fully loaded
         into memory.
@@ -245,7 +246,8 @@ class VLArray(hdf5extension.VLArray, Leaf):
             objects after they are loaded from disk, you can use this
             `ActiveState recipe
             <http://code.activestate.com/recipes/577504/>`_.
-        """)
+        """
+        return self._get_memory_size()
 
     # Other methods
     # ~~~~~~~~~~~~~
@@ -325,7 +327,7 @@ class VLArray(hdf5extension.VLArray, Leaf):
 
         # Check the chunkshape parameter
         if new and chunkshape is not None:
-            if isinstance(chunkshape, (int, numpy.integer, long)):
+            if isinstance(chunkshape, (int, numpy.integer)):
                 chunkshape = (chunkshape,)
             try:
                 chunkshape = tuple(chunkshape)
@@ -497,8 +499,6 @@ class VLArray(hdf5extension.VLArray, Leaf):
 
         return self.atom.enum
 
-    getEnum = previous_api(get_enum)
-
     def append(self, sequence):
         """Add a sequence of data to the end of the dataset.
 
@@ -606,9 +606,7 @@ class VLArray(hdf5extension.VLArray, Leaf):
         self._init = True  # Sentinel
         self.nrow = SizeType(self._start - self._step)    # row number
 
-    _initLoop = previous_api(_init_loop)
-
-    def next(self):
+    def __next__(self):
         """Get the next element of the array during an iteration.
 
         The element is returned as a list of objects of the current
@@ -775,7 +773,7 @@ class VLArray(hdf5extension.VLArray, Leaf):
             coords = [key]
             value = [value]
         elif isinstance(key, slice):
-            (start, stop, step) = self._process_range(
+            start, stop, step = self._process_range(
                 key.start, key.stop, key.step)
             coords = range(start, stop, step)
         # Try with a boolean or point selection
@@ -825,7 +823,7 @@ class VLArray(hdf5extension.VLArray, Leaf):
         """Read rows specified in `coords`."""
         rows = []
         for coord in coords:
-            rows.append(self.read(long(coord))[0])
+            rows.append(self.read(int(coord))[0])
         return rows
 
     def _g_copy_with_stats(self, group, name, start, stop, step,
@@ -852,7 +850,7 @@ class VLArray(hdf5extension.VLArray, Leaf):
             atomsize = self.atom.base.size
         else:
             atomsize = self.atom.size
-        for start2 in xrange(start, stop, step * nrowsinbuf):
+        for start2 in range(start, stop, step * nrowsinbuf):
             # Save the records on disk
             stop2 = start2 + step * nrowsinbuf
             if stop2 > stop:
@@ -864,8 +862,6 @@ class VLArray(hdf5extension.VLArray, Leaf):
             nrowscopied += 1
         object.nrows = nrowscopied
         return (object, nbytes)
-
-    _g_copyWithStats = previous_api(_g_copy_with_stats)
 
     def __repr__(self):
         """This provides more metainfo in addition to standard __str__"""

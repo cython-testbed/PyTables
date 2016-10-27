@@ -8,15 +8,14 @@ We are happy to announce PyTables @VERSION@.
 What's new
 ==========
 
-This is a bug fix release. It contains a fix for a segv fault in
-indexesextension.keysort().
+#XXX version-specific blurb XXX#
 
 In case you want to know more in detail what has changed in this
 version, please refer to: http://www.pytables.org/release_notes.html
 
 You can install it via pip or download a source package with generated
 PDF and HTML docs from:
-http://sourceforge.net/projects/pytables/files/pytables/@VERSION@
+https://github.com/PyTables/PyTables/releases/v@VERSION@
 
 For an online version of the manual, visit:
 http://www.pytables.org/usersguide/index.html

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import random
 import tempfile
@@ -12,8 +13,10 @@ from tables import StringCol, BoolCol, IntCol, FloatCol
 from tables.idxutils import calc_chunksize
 from tables.tests import common
 from tables.tests.common import verbose, heavy
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+import six
+from six.moves import range
 
 
 # An alias for frozenset
@@ -74,7 +77,7 @@ class SelectValuesTestCase(common.TempFileMixin, TestCase):
                                           filters, self.nrows,
                                           chunkshape=(self.chunkshape,))
         count = 0
-        for i in xrange(0, self.nrows, self.nrep):
+        for i in range(0, self.nrows, self.nrep):
             for j in range(self.nrep):
                 if self.random:
                     k = random.randrange(self.nrows)
@@ -105,7 +108,7 @@ class SelectValuesTestCase(common.TempFileMixin, TestCase):
             # Make sure nrowsinbuf is a multiple of chunkshape
             table1.nrowsinbuf -= table1.nrowsinbuf % self.chunkshape
         # Index all entries:
-        for col in table1.colinstances.itervalues():
+        for col in six.itervalues(table1.colinstances):
             indexrows = col.create_index(
                 kind=self.kind, _blocksizes=self.blocksizes)
         if verbose:
@@ -468,7 +471,7 @@ class SelectValuesTestCase(common.TempFileMixin, TestCase):
 
         # Convert the limits to the appropriate type
         # il = long(self.il)
-        sl = long(self.sl)
+        sl = int(self.sl)
 
         # Do some selections and check the results
         t1col = table1.cols.var3
@@ -546,7 +549,7 @@ class SelectValuesTestCase(common.TempFileMixin, TestCase):
 
         # Convert the limits to the appropriate type
         # il = int(self.il)
-        sl = long(self.sl)
+        sl = int(self.sl)
 
         # Do some selections and check the results
         t1col = table1.cols.var3
@@ -2270,7 +2273,7 @@ class SelectValuesTestCase(common.TempFileMixin, TestCase):
 
         # Append more rows in already created indexes
         count = 0
-        for i in xrange(0, self.nrows//2, self.nrep):
+        for i in range(0, self.nrows//2, self.nrep):
             for j in range(self.nrep):
                 if self.random:
                     k = random.randrange(self.nrows)
@@ -3189,7 +3192,7 @@ class LastRowReuseBuffers(TestCase):
 
         ta.cols.id1.create_index()
 
-        for i in xrange(self.nelem):
+        for i in range(self.nelem):
             nrow = random.randint(0, self.nelem-1)
             value = id1[nrow]
             idx = ta.get_where_list('id1 == %s' % value)
@@ -3208,7 +3211,7 @@ class LastRowReuseBuffers(TestCase):
 
         ta.cols.id1.create_index()
 
-        for i in xrange(self.nelem):
+        for i in range(self.nelem):
             nrow = random.randint(0, self.nelem-1)
             value = id1[nrow]
             idx = ta.get_where_list('id1 == %s' % value)
@@ -3227,7 +3230,7 @@ class LastRowReuseBuffers(TestCase):
 
         ta.cols.id1.create_index()
 
-        for i in xrange(self.nelem):
+        for i in range(self.nelem):
             nrow = random.randint(0, self.nelem-1)
             value = id1[nrow]
             idx = ta.get_where_list('id1 == %s' % value)
@@ -3303,7 +3306,8 @@ for (cname, cbasenames, cdict) in iclassdata():
 
 
 # Test case for issue #319
-class BuffersizeMultipleChunksize(TestCase):
+class BuffersizeMultipleChunksize(common.TempFileMixin, TestCase):
+    open_mode = 'w'
 
     def test01(self):
         numpy.random.seed(2)
@@ -3317,15 +3321,15 @@ class BuffersizeMultipleChunksize(TestCase):
         arr['o'] = numpy.random.randint(-20000, -15000, size=n)
         arr['value'] = numpy.random.randn(n)
 
-        handle = tables.open_file('test.h5', 'w')
-        node = handle.create_group(handle.root, 'foo')
-        table = handle.create_table(node, 'table', dict(
+        node = self.h5file.create_group('/', 'foo')
+        table = self.h5file.create_table(node, 'table', dict(
             index=tables.Int64Col(),
             o=tables.Int64Col(),
             value=tables.FloatCol(shape=())), expectedrows=10000000)
 
         table.append(arr)
-        handle.close()
+
+        self._reopen('a')
 
         v1 = numpy.unique(arr['o'])[0]
         v2 = numpy.unique(arr['o'])[1]
@@ -3334,8 +3338,7 @@ class BuffersizeMultipleChunksize(TestCase):
         if verbose:
             print("selecting values: %s" % selector)
 
-        handle = tables.open_file('test.h5', 'a')
-        table = handle.root.foo.table
+        table = self.h5file.root.foo.table
 
         result = numpy.unique(table.read_where(selector)['o'])
         numpy.testing.assert_almost_equal(result, res)
@@ -3356,14 +3359,12 @@ class BuffersizeMultipleChunksize(TestCase):
             if verbose:
                 print("result: %s\texpected: %s" % (result, res))
 
-        handle.close()
-
 
 # Test case for issue #441
 class SideEffectNumPyQuicksort(TestCase):
 
     def test01(self):
-        bug_file = TestCase._testFilename("bug-idx.h5")
+        bug_file = test_filename("bug-idx.h5")
         tmp_file = tempfile.mktemp(".h5")
         tables.copy_file(bug_file, tmp_file)
         h5 = tables.open_file(tmp_file, "a")

@@ -11,6 +11,7 @@
 ########################################################################
 
 """Test module for compatibility with plain HDF files."""
+from __future__ import absolute_import
 
 import os
 import shutil
@@ -21,8 +22,10 @@ import numpy
 import tables
 from tables.tests import common
 from tables.tests.common import allequal
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+import six
+from six.moves import range
 
 
 class EnumTestCase(common.TestFileMixin, TestCase):
@@ -32,7 +35,7 @@ class EnumTestCase(common.TestFileMixin, TestCase):
 
     """
 
-    h5fname = TestCase._testFilename('smpl_enum.h5')
+    h5fname = test_filename('smpl_enum.h5')
 
     def test(self):
         self.assertTrue('/EnumTest' in self.h5file)
@@ -83,37 +86,37 @@ class NumericTestCase(common.TestFileMixin, TestCase):
 
 
 class F64BETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_f64be.h5')
+    h5fname = test_filename('smpl_f64be.h5')
     type = 'float64'
     byteorder = 'big'
 
 
 class F64LETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_f64le.h5')
+    h5fname = test_filename('smpl_f64le.h5')
     type = 'float64'
     byteorder = 'little'
 
 
 class I64BETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_i64be.h5')
+    h5fname = test_filename('smpl_i64be.h5')
     type = 'int64'
     byteorder = 'big'
 
 
 class I64LETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_i64le.h5')
+    h5fname = test_filename('smpl_i64le.h5')
     type = 'int64'
     byteorder = 'little'
 
 
 class I32BETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_i32be.h5')
+    h5fname = test_filename('smpl_i32be.h5')
     type = 'int32'
     byteorder = 'big'
 
 
 class I32LETestCase(NumericTestCase):
-    h5fname = TestCase._testFilename('smpl_i32le.h5')
+    h5fname = test_filename('smpl_i32le.h5')
     type = 'int32'
     byteorder = 'little'
 
@@ -126,7 +129,7 @@ class ChunkedCompoundTestCase(common.TestFileMixin, TestCase):
 
     """
 
-    h5fname = TestCase._testFilename('smpl_compound_chunked.h5')
+    h5fname = test_filename('smpl_compound_chunked.h5')
 
     def test(self):
         self.assertTrue('/CompoundChunked' in self.h5file)
@@ -180,7 +183,7 @@ class ContiguousCompoundTestCase(common.TestFileMixin, TestCase):
 
     """
 
-    h5fname = TestCase._testFilename('non-chunked-table.h5')
+    h5fname = test_filename('non-chunked-table.h5')
 
     def test(self):
         self.assertTrue('/test_var/structure variable' in self.h5file)
@@ -217,7 +220,7 @@ class ContiguousCompoundTestCase(common.TestFileMixin, TestCase):
 class ContiguousCompoundAppendTestCase(common.TestFileMixin, TestCase):
     """Test for appending data to native contiguous compound datasets."""
 
-    h5fname = TestCase._testFilename('non-chunked-table.h5')
+    h5fname = test_filename('non-chunked-table.h5')
 
     def test(self):
         self.assertTrue('/test_var/structure variable' in self.h5file)
@@ -249,7 +252,7 @@ class ExtendibleTestCase(common.TestFileMixin, TestCase):
 
     """
 
-    h5fname = TestCase._testFilename('smpl_SDSextendible.h5')
+    h5fname = test_filename('smpl_SDSextendible.h5')
 
     def test(self):
         self.assertTrue('/ExtendibleArray' in self.h5file)
@@ -282,23 +285,23 @@ class ExtendibleTestCase(common.TestFileMixin, TestCase):
 class SzipTestCase(common.TestFileMixin, TestCase):
     """Test for native HDF5 files with datasets compressed with szip."""
 
-    h5fname = TestCase._testFilename('test_szip.h5')
+    h5fname = test_filename('test_szip.h5')
 
     def test(self):
         self.assertTrue('/dset_szip' in self.h5file)
 
         arr = self.h5file.get_node('/dset_szip')
-        filters = ("Filters(complib='szip', shuffle=False, fletcher32=False, "
-                   "least_significant_digit=None)")
+        filters = ("Filters(complib='szip', shuffle=False, bitshuffle=False, "
+                   "fletcher32=False, least_significant_digit=None)")
         self.assertEqual(repr(arr.filters), filters)
 
 
 # this demonstrates github #203
 class MatlabFileTestCase(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename('matlab_file.mat')
+    h5fname = test_filename('matlab_file.mat')
 
     def test_unicode(self):
-        array = self.h5file.get_node(unicode('/'), unicode('a'))
+        array = self.h5file.get_node(six.text_type('/'), six.text_type('a'))
         self.assertEqual(array.shape, (3, 1))
 
     # in Python 3 this will be the same as the test above
@@ -309,6 +312,45 @@ class MatlabFileTestCase(common.TestFileMixin, TestCase):
     def test_numpy_str(self):
         array = self.h5file.get_node(numpy.str_('/'), numpy.str_('a'))
         self.assertEqual(array.shape, (3, 1))
+
+
+class ObjectReferenceTestCase(common.TestFileMixin, TestCase):
+    h5fname = test_filename('test_ref_array1.mat')
+
+    def test_node_var(self):
+        array = self.h5file.get_node('/ANN/my_arr')
+        self.assertEqual(array.shape, (1, 3))
+
+    def test_ref_utf_str(self):
+        array = self.h5file.get_node('/ANN/my_arr')
+
+        self.assertTrue(common.areArraysEqual(
+                        array[0][0][0],
+                        numpy.array([0, 0],
+                                    dtype=numpy.uint64)))
+
+
+class ObjectReferenceRecursiveTestCase(common.TestFileMixin, TestCase):
+    h5fname = test_filename('test_ref_array2.mat')
+
+    def test_var(self):
+        array = self.h5file.get_node('/var')
+        self.assertEqual(array.shape, (3, 1))
+
+    def test_ref_str(self):
+        array = self.h5file.get_node('/var')
+
+        self.assertTrue(common.areArraysEqual(
+                        array[1][0][0],
+                        numpy.array([[116], [101], [115], [116]],
+                                    dtype=numpy.uint16)))
+
+    def test_double_ref(self):
+        array = self.h5file.get_node('/var')
+        self.assertTrue(common.areArraysEqual(
+                        array[2][0][0][1][0],
+                        numpy.array([[105], [110], [115], [105], [100], [101]],
+                                    dtype=numpy.uint16)))
 
 
 def suite():
@@ -331,6 +373,8 @@ def suite():
         theSuite.addTest(unittest.makeSuite(ExtendibleTestCase))
         theSuite.addTest(unittest.makeSuite(SzipTestCase))
         theSuite.addTest(unittest.makeSuite(MatlabFileTestCase))
+        theSuite.addTest(unittest.makeSuite(ObjectReferenceTestCase))
+        theSuite.addTest(unittest.makeSuite(ObjectReferenceRecursiveTestCase))
 
     return theSuite
 

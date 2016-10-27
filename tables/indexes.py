@@ -12,15 +12,15 @@
 ########################################################################
 
 """Here is defined the IndexArray class."""
+from __future__ import absolute_import
 
 from bisect import bisect_left, bisect_right
 
-from tables.node import NotLoggedMixin
-from tables.carray import CArray
-from tables.earray import EArray
-from tables import indexesextension
+from .node import NotLoggedMixin
+from .carray import CArray
+from .earray import EArray
+from . import indexesextension
 
-from tables._past import previous_api, previous_api_property
 
 # Declarations for inheriting
 
@@ -31,7 +31,6 @@ class CacheArray(NotLoggedMixin, EArray, indexesextension.CacheArray):
     # Class identifier.
     _c_classid = 'CACHEARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
 
 
 class LastRowArray(NotLoggedMixin, CArray, indexesextension.LastRowArray):
@@ -41,7 +40,6 @@ class LastRowArray(NotLoggedMixin, CArray, indexesextension.LastRowArray):
     # Class identifier.
     _c_classid = 'LASTROWARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
 
 
 class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
@@ -75,17 +73,18 @@ class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
     # Class identifier.
     _c_classid = 'INDEXARRAY'
 
-    _c_classId = previous_api_property('_c_classid')
 
     # Properties
     # ~~~~~~~~~~
-    chunksize = property(
-        lambda self: self.chunkshape[1], None, None,
-        """The chunksize for this object.""")
+    @property
+    def chunksize(self):
+        """The chunksize for this object."""
+        return self.chunkshape[1]
 
-    slicesize = property(
-        lambda self: self.shape[1], None, None,
-        """The slicesize for this object.""")
+    @property
+    def slicesize(self):
+        """The slicesize for this object."""
+        return self.shape[1]
 
     # Other methods
     # ~~~~~~~~~~~~~
@@ -175,7 +174,6 @@ class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
             result2 += chunksize * nchunk2
         return (result1, result2)
 
-    _searchBin = previous_api(_search_bin)
 
     def __str__(self):
         "A compact representation of this class"

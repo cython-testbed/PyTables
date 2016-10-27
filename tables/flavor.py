@@ -45,12 +45,14 @@ Variables
     friendlier interfaces to flavor conversion.
 
 """
+from __future__ import absolute_import
 
 # Imports
 # =======
 import warnings
 
-from tables.exceptions import FlavorError, FlavorWarning
+from .exceptions import FlavorError, FlavorWarning
+import six
 
 
 # Public variables
@@ -294,7 +296,7 @@ def _deregister_aliases(flavor):
     """Deregister aliases of a given `flavor` (no checks)."""
 
     rm_aliases = []
-    for (an_alias, a_flavor) in alias_map.iteritems():
+    for (an_alias, a_flavor) in six.iteritems(alias_map):
         if a_flavor == flavor:
             rm_aliases.append(an_alias)
     for an_alias in rm_aliases:
@@ -379,12 +381,28 @@ def _numpy_contiguous(convfunc):
 def _conv_numpy_to_numpy(array):
     # Passes contiguous arrays through and converts scalars into
     # scalar arrays.
-    return numpy.asarray(array)
+    nparr = numpy.asarray(array)
+    if nparr.dtype.kind == 'U':
+        # from Python 3 loads of common strings are disguised as Unicode
+        try:
+            # try to convert to basic 'S' type
+            return nparr.astype('S')
+        except UnicodeEncodeError:
+            pass  # pass on true Unicode arrays downstream in case it can be handled in the future
+    return nparr
 
 
 @_numpy_contiguous
 def _conv_python_to_numpy(array):
-    return numpy.array(array)
+    nparr = numpy.array(array)
+    if nparr.dtype.kind == 'U':
+        # from Python 3 loads of common strings are disguised as Unicode
+        try:
+            # try to convert to basic 'S' type
+            return nparr.astype('S')
+        except UnicodeEncodeError:
+            pass  # pass on true Unicode arrays downstream in case it can be handled in the future
+    return nparr
 
 
 def _conv_numpy_to_python(array):

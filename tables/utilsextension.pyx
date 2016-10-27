@@ -26,10 +26,9 @@ import numpy
 from tables.description import Description, Col
 from tables.misc.enum import Enum
 from tables.exceptions import HDF5ExtError
-from tables.atom import Atom, EnumAtom
+from tables.atom import Atom, EnumAtom, ReferenceAtom
 
 from tables.utils import check_file_access
-from tables._past import previous_api
 
 from cpython cimport PY_MAJOR_VERSION
 from libc.stdio cimport stderr
@@ -39,7 +38,7 @@ from cpython.bytes cimport PyBytes_Check, PyBytes_FromStringAndSize
 from cpython.unicode cimport PyUnicode_DecodeUTF8, PyUnicode_Check
 
 from numpy cimport (import_array, ndarray, dtype,
-  npy_int64, PyArray_DescrFromType, npy_intp,
+  npy_int64, PyArray_GETPTR1, PyArray_DescrFromType, npy_intp,
   NPY_BOOL, NPY_STRING, NPY_INT8, NPY_INT16, NPY_INT32, NPY_INT64,
   NPY_UINT8, NPY_UINT16, NPY_UINT32, NPY_UINT64, NPY_FLOAT16, NPY_FLOAT32,
   NPY_FLOAT64, NPY_COMPLEX64, NPY_COMPLEX128)
@@ -60,7 +59,7 @@ from definitions cimport (H5ARRAYget_info, H5ARRAYget_ndims,
   H5T_STD_U32BE, H5T_STD_U32LE, H5T_STD_U64BE, H5T_STD_U64LE, H5T_STD_U8BE,
   H5T_STD_U8LE, H5T_STRING, H5T_TIME, H5T_UNIX_D32BE, H5T_UNIX_D32LE,
   H5T_UNIX_D64BE, H5T_UNIX_D64LE, H5T_VLEN, H5T_class_t, H5T_sign_t,
-  H5Tarray_create, H5Tclose, H5Tcopy, H5Tcreate, H5Tenum_create,
+  H5Tarray_create, H5Tclose, H5Tequal, H5Tcopy, H5Tcreate, H5Tenum_create,
   H5Tenum_insert, H5Tget_array_dims, H5Tget_array_ndims, H5Tget_class,
   H5Tget_member_name, H5Tget_member_type, H5Tget_member_value,
   H5Tget_native_type, H5Tget_nmembers, H5Tget_offset, H5Tget_order,
@@ -71,7 +70,9 @@ from definitions cimport (H5ARRAYget_info, H5ARRAYget_ndims,
   create_ieee_float16, create_ieee_complex192, create_ieee_complex256,
   get_len_of_range, get_order, herr_t, hid_t, hsize_t,
   hssize_t, htri_t, is_complex, register_blosc, set_order,
-  pt_H5free_memory)
+  pt_H5free_memory, H5T_STD_REF_OBJ, H5Rdereference, H5R_OBJECT, H5I_DATASET, H5I_REFERENCE,
+  H5Iget_type, hobj_ref_t, H5Oclose)
+
 
 
 # Platform-dependent types
@@ -193,6 +194,10 @@ cdef extern from "blosc.h" nogil:
   int blosc_compcode_to_compname(int compcode, char **compname)
   int blosc_get_complib_info(char *compname, char **complib, char **version)
 
+cdef extern from "H5ARRAY.h" nogil:
+  herr_t H5ARRAYread(hid_t dataset_id, hid_t type_id,
+                     hsize_t start, hsize_t nrows, hsize_t step,
+                     int extdim, void *data)
 
 # @TODO: use the c_string_type and c_string_encoding global directives
 #        (new in cython 0.19)
@@ -310,7 +315,6 @@ def set_blosc_max_threads(nthreads):
   return blosc_set_nthreads(nthreads)
 
 
-setBloscMaxThreads = previous_api(set_blosc_max_threads)
 
 
 if sys.platform == "win32":
@@ -423,7 +427,6 @@ def silence_hdf5_messages(silence=True):
         raise HDF5ExtError("unable to configure HDF5 internal error handling")
 
 
-silenceHDF5Messages = previous_api(silence_hdf5_messages)
 
 
 # Disable automatic HDF5 error logging
@@ -637,7 +640,6 @@ def is_hdf5_file(object filename):
   return ret > 0
 
 
-isHDF5File = previous_api(is_hdf5_file)
 
 
 def is_pytables_file(object filename):
@@ -673,7 +675,6 @@ def is_pytables_file(object filename):
   return isptf
 
 
-isPyTablesFile = previous_api(is_pytables_file)
 
 
 def get_hdf5_version():
@@ -682,7 +683,6 @@ def get_hdf5_version():
   return getHDF5VersionInfo()[1]
 
 
-getHDF5Version = previous_api(get_hdf5_version)
 
 
 def get_pytables_version():
@@ -690,7 +690,6 @@ def get_pytables_version():
 
   return _getTablesVersion()
 
-getPyTablesVersion = previous_api(get_pytables_version)
 
 
 def which_lib_version(str name):
@@ -743,7 +742,6 @@ def which_lib_version(str name):
   return None
 
 
-whichLibVersion = previous_api(which_lib_version)
 
 
 # A function returning all the compressors supported by local Blosc
@@ -851,7 +849,8 @@ def which_class(hid_t loc_id, object name):
        (class_id == H5T_TIME)     or
        (class_id == H5T_ENUM)     or
        (class_id == H5T_STRING)   or
-       (class_id == H5T_ARRAY)):
+       (class_id == H5T_ARRAY)    or
+       (class_id == H5T_REFERENCE)):
     if layout == H5D_CHUNKED:
       if H5ARRAYget_ndims(dataset_id, &rank) < 0:
         raise HDF5ExtError("Problems getting ndims.")
@@ -916,7 +915,6 @@ def which_class(hid_t loc_id, object name):
   return classId
 
 
-whichClass = previous_api(which_class)
 
 
 def get_nested_field(recarray, fieldname):
@@ -944,7 +942,6 @@ def get_nested_field(recarray, fieldname):
   return field
 
 
-getNestedField = previous_api(get_nested_field)
 
 
 def read_f_attr(hid_t file_id, str attr_name):
@@ -1002,7 +999,6 @@ def get_filters(parent_id, name):
   return get_filter_names(parent_id, encoded_name)
 
 
-getFilters = previous_api(get_filters)
 
 
 # This is used by several <Leaf>._convert_types() methods.
@@ -1038,7 +1034,6 @@ def get_type_enum(hid_t h5type):
       "enumerated values can not be stored using the given type")
   return enumId
 
-getTypeEnum = previous_api(get_type_enum)
 
 
 def enum_from_hdf5(hid_t enumId, str byteorder):
@@ -1100,7 +1095,6 @@ def enum_from_hdf5(hid_t enumId, str byteorder):
   return Enum(enumDict), dtype
 
 
-enumFromHDF5 = previous_api(enum_from_hdf5)
 
 
 def enum_to_hdf5(object enum_atom, str byteorder):
@@ -1113,13 +1107,9 @@ def enum_to_hdf5(object enum_atom, str byteorder):
 
   """
 
-  cdef bytes   name
   cdef hid_t   base_id, enum_id
-  cdef long    bytestride, i
-  cdef void    *rbuffer
-  cdef void    *rbuf
-  cdef ndarray values
   cdef object  base_atom
+  cdef ndarray values
 
   # Get the base HDF5 type and create the enumerated type.
   base_atom = Atom.from_dtype(enum_atom.dtype.base)
@@ -1129,35 +1119,39 @@ def enum_to_hdf5(object enum_atom, str byteorder):
     enum_id = H5Tenum_create(base_id)
     if enum_id < 0:
       raise HDF5ExtError("failed to create HDF5 enumerated type")
+
   finally:
     if H5Tclose(base_id) < 0:
       raise HDF5ExtError("failed to close HDF5 base type")
 
-  # Set the name and value of each of the members.
-  names = enum_atom._names
-  values = enum_atom._values
-  bytestride = values.strides[0]
-  rbuffer = values.data
+  try:
+    # Set the name and value of each of the members.
+    names = enum_atom._names
+    values = enum_atom._values
 
-  i = names.index(enum_atom._defname)
-  idx = list(range(len(names)))
-  idx.pop(i)
-  idx.insert(0, i)
+    # This saves the default enum value first so that we can restore it
+    default_name = enum_atom._defname
+    index_default = names.index(default_name)
+    H5Tenum_insert(enum_id, default_name.encode('utf-8'),
+        PyArray_GETPTR1(values, index_default))
 
-  for i in idx:
-    name = names[i].encode('utf-8')
-    rbuf = <void *>(<char *>rbuffer + bytestride * i)
-    if H5Tenum_insert(enum_id, name, rbuf) < 0:
-      e = HDF5ExtError("failed to insert value into HDF5 enumerated type")
-      if H5Tclose(enum_id) < 0:
-        raise HDF5ExtError("failed to close HDF5 enumerated type")
-      raise e
+    for i, n in enumerate(names):
+      # Skip the default value as we have already inserted it before
+      if i == index_default:
+        continue
 
-  # Return the new, open HDF5 enumerated type.
-  return enum_id
+      if H5Tenum_insert(enum_id, n.encode('utf-8'),
+          PyArray_GETPTR1(values, i)) < 0:
+        raise HDF5ExtError("failed to insert value into HDF5 enumerated type")
 
+    # Return the new, open HDF5 enumerated type.
+    return enum_id
 
-enumToHDF5 = previous_api(enum_to_hdf5)
+  except:
+    if H5Tclose(enum_id) < 0:
+      raise HDF5ExtError("failed to close HDF5 enumerated type")
+
+    raise
 
 
 def atom_to_hdf5_type(atom, str byteorder):
@@ -1208,7 +1202,6 @@ def atom_to_hdf5_type(atom, str byteorder):
   return tid
 
 
-AtomToHDF5Type = previous_api(atom_to_hdf5_type)
 
 
 def load_enum(hid_t type_id):
@@ -1239,8 +1232,6 @@ def load_enum(hid_t type_id):
     if H5Tclose(enumId) < 0:
       raise HDF5ExtError("failed to close HDF5 enumerated type")
 
-
-loadEnum = previous_api(load_enum)
 
 
 def hdf5_to_np_nested_type(hid_t type_id):
@@ -1282,7 +1273,6 @@ def hdf5_to_np_nested_type(hid_t type_id):
   return desc
 
 
-HDF5ToNPNestedType = previous_api(hdf5_to_np_nested_type)
 
 
 def hdf5_to_np_ext_type(hid_t type_id, pure_numpy_types=True, atom=False):
@@ -1319,7 +1309,7 @@ def hdf5_to_np_ext_type(hid_t type_id, pure_numpy_types=True, atom=False):
   elif class_id == H5T_INTEGER:
     # Get the sign
     sign = H5Tget_sign(type_id)
-    if (sign > 0):
+    if sign > 0:
       stype = "i%s" % itemsize
     else:
       stype = "u%s" % itemsize
@@ -1363,6 +1353,12 @@ def hdf5_to_np_ext_type(hid_t type_id, pure_numpy_types=True, atom=False):
     stype, shape = hdf5_to_np_ext_type(super_type_id, pure_numpy_types)
     # Release resources
     H5Tclose(super_type_id)
+  elif class_id == H5T_REFERENCE:
+    # only standard referenced objects (for atoms) are now supported
+    if not atom or not H5Tequal(type_id, H5T_STD_REF_OBJ):
+      raise TypeError("the HDF5 class ``%s`` is not supported yet"
+                      % hdf5_class_to_string[class_id])
+    stype = "_ref_"
   elif class_id == H5T_ARRAY:
     # Get the array base component
     super_type_id = H5Tget_super(type_id)
@@ -1387,7 +1383,6 @@ def hdf5_to_np_ext_type(hid_t type_id, pure_numpy_types=True, atom=False):
   return stype, shape
 
 
-HDF5ToNPExtType = previous_api(hdf5_to_np_ext_type)
 
 
 def atom_from_hdf5_type(hid_t type_id, pure_numpy_types=False):
@@ -1403,7 +1398,9 @@ def atom_from_hdf5_type(hid_t type_id, pure_numpy_types=False):
 
   stype, shape = hdf5_to_np_ext_type(type_id, pure_numpy_types, atom=True)
   # Create the Atom
-  if stype == 'e':
+  if stype == '_ref_':
+    atom_ = ReferenceAtom(shape=shape)
+  elif stype == 'e':
     (enum_, nptype) = load_enum(type_id)
     # Take one of the names as the default in the enumeration.
     dflt = next(iter(enum_))[0]
@@ -1417,7 +1414,6 @@ def atom_from_hdf5_type(hid_t type_id, pure_numpy_types=False):
   return atom_
 
 
-AtomFromHDF5Type = previous_api(atom_from_hdf5_type)
 
 
 def create_nested_type(object desc, str byteorder):
@@ -1447,8 +1443,125 @@ def create_nested_type(object desc, str byteorder):
   return tid
 
 
-createNestedType = previous_api(create_nested_type)
+cdef int load_reference(hid_t dataset_id, hobj_ref_t *refbuf, size_t item_size, ndarray nparr) except -1:
+  """Load a reference as an array of objects
+  :param dataset_id: dataset of the reference
+  :param refbuf: load the references requested
+  :param item_size: size of the reference in the file read into refbuf
+  :param nparr: numpy object array already pre-allocated with right size and shape for refbuf references
+  """
+  cdef size_t nelements = <size_t>nparr.size
+  cdef int i, j
+  cdef hid_t refobj_id = -1  # if valid can be only be a dataset id
+  cdef hid_t reftype_id
+  cdef hid_t disk_type_id = -1
+  cdef void *rbuf
+  cdef int rank = 0
+  cdef hsize_t *maxdims = NULL
+  cdef hsize_t *dims = NULL
+  cdef char cbyteorder[11]
+  cdef H5T_class_t class_id
+  cdef hsize_t nrows
+  cdef ndarray nprefarr
+  cdef int extdim
+  cdef hobj_ref_t *newrefbuf = NULL
 
+
+  if refbuf == NULL:
+    raise ValueError("Invalid reference buffer")
+
+  try:
+
+    for i from 0 <= i < nelements:
+      refobj_id = H5Rdereference(dataset_id, H5R_OBJECT, &refbuf[i])
+      if H5Iget_type(refobj_id) != H5I_DATASET:
+        raise ValueError('Invalid reference type %d %d' % (H5Iget_type(refobj_id), item_size))
+      disk_type_id = H5Dget_type(refobj_id)
+      reftype_id = get_native_type(disk_type_id)
+      # Get the rank for this array object
+      if H5ARRAYget_ndims(refobj_id, &rank) < 0:
+        raise HDF5ExtError("Problems getting ndims!")
+
+      dims = <hsize_t *>malloc(rank * sizeof(hsize_t))
+      maxdims = <hsize_t *>malloc(rank * sizeof(hsize_t))
+      # Get info on dimensions, class and type (of base class)
+      ret = H5ARRAYget_info(refobj_id, disk_type_id,
+                            dims, maxdims,
+                            &class_id, cbyteorder)
+      if ret < 0:
+        raise HDF5ExtError("Unable to get array info.")
+
+      # Get the extendable dimension (if any)
+      extdim = -1  # default is non-extensible Array
+      for j from 0 <= j < rank:
+        if maxdims[j] == -1:
+          extdim = j
+          break
+      if extdim < 0:
+        extdim += rank
+
+      nrows = dims[extdim]
+
+      # read entire dataset as numpy array
+      stype_, shape_ = hdf5_to_np_ext_type(reftype_id, pure_numpy_types=True, atom=True)
+      if stype_ == "_ref_":
+        dtype_ = numpy.dtype("O", shape_)
+      else:
+        dtype_ = numpy.dtype(stype_, shape_)
+      shape = []
+      for j from 0 <= j < rank:
+        shape.append(<int>dims[j])
+      shape = tuple(shape)
+
+      nprefarr = numpy.empty(dtype=dtype_, shape=shape)
+      nparr[i] = [nprefarr]  # box the array in a list to store it as one object
+      if stype_ == "_ref_":
+        newrefbuf = <hobj_ref_t *>malloc(nprefarr.size * item_size)
+        rbuf = newrefbuf
+      else:
+        rbuf = nprefarr.data
+
+      # Do the physical read
+      with nogil:
+          ret = H5ARRAYread(refobj_id, reftype_id, 0, nrows, 1, extdim, rbuf)
+      if ret < 0:
+        raise HDF5ExtError("Problems reading the array data.")
+
+      if stype_ == "_ref_":
+        # recurse to read the reference
+        load_reference(refobj_id, newrefbuf, item_size, nprefarr)
+
+      # close objects
+      if newrefbuf:
+        free(<void *>newrefbuf)
+        newrefbuf = NULL
+      H5Oclose(refobj_id)
+      refobj_id = -1
+      H5Tclose(reftype_id)
+      reftype_id = -1
+      H5Tclose(disk_type_id)
+      disk_type_id = -1
+      free(<void *>maxdims)
+      maxdims = NULL
+      free(<void *>dims)
+      dims = NULL
+  finally:
+    if newrefbuf:
+      free(<void *>newrefbuf)
+      newrefbuf = NULL
+    if refobj_id >= 0:
+      H5Oclose(refobj_id)
+    if reftype_id >= 0:
+      H5Tclose(reftype_id)
+    if disk_type_id >= 0:
+      H5Tclose(disk_type_id)
+    if maxdims:
+      free(<void *>maxdims)
+    if dims:
+      free(<void *>dims)
+
+  # no error
+  return 0
 
 ## Local Variables:
 ## mode: python

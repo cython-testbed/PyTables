@@ -13,6 +13,7 @@
 """Utilities for PyTables' test suites."""
 
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import re
 import sys
@@ -21,6 +22,9 @@ import locale
 import platform
 import tempfile
 import warnings
+from distutils.version import LooseVersion
+
+from pkg_resources import resource_filename
 
 try:
     import unittest2 as unittest
@@ -35,6 +39,11 @@ import numexpr
 
 import tables
 from tables.utils import detect_number_of_cores
+from tables.req_versions import min_blosc_bitshuffle_version
+
+hdf5_version = LooseVersion(tables.hdf5_version)
+blosc_version = LooseVersion(tables.which_lib_version("blosc")[1])
+
 
 verbose = False
 """Show detailed output of the testing process."""
@@ -117,6 +126,10 @@ def print_versions():
             "%s (%s)" % (k, v[1]) for k, v in sorted(blosc_cinfo.items())
         ]
         print("Blosc compressors:   %s" % ', '.join(blosc_cinfo))
+        blosc_finfo = ['shuffle']
+        if tinfo[1] >= min_blosc_bitshuffle_version:
+            blosc_finfo.append('bitshuffle')
+        print("Blosc filters:       %s" % ', '.join(blosc_finfo))
     try:
         from Cython import __version__ as cython_version
         print('Cython version:      %s' % cython_version)
@@ -136,6 +149,10 @@ def print_versions():
 
     # This should improve readability whan tests are run by CI tools
     sys.stdout.flush()
+
+
+def test_filename(filename):
+    return resource_filename('tables.tests', filename)
 
 
 def verbosePrint(string, nonl=False):
@@ -263,7 +280,7 @@ if not hasattr(unittest.TestCase, 'assertWarns'):
 
     class _AssertWarnsContext(_AssertRaisesBaseContext):
         def __enter__(self):
-            for v in sys.modules.values():
+            for v in list(sys.modules.values()):
                 if getattr(v, '__warningregistry__', None):
                     v.__warningregistry__ = {}
             self.warnings_manager = warnings.catch_warnings(record=True)
@@ -332,20 +349,6 @@ class PyTablesTestCase(unittest.TestCase):
             title = "Running %s.%s" % (name, methodName)
             print('%s\n%s' % (title, '-' * len(title)))
 
-    @classmethod
-    def _testFilename(class_, filename):
-        """Returns an absolute version of the `filename`, taking care of the
-        location of the calling test case class."""
-        modname = class_.__module__
-        # When the definitive switch to ``setuptools`` is made,
-        # this should definitely use the ``pkg_resouces`` API::
-        #
-        #   return pkg_resources.resource_filename(modname, filename)
-        #
-        modfile = sys.modules[modname].__file__
-        dirname = os.path.dirname(modfile)
-        return os.path.join(dirname, filename)
-
     # COMPATIBILITY: assertWarns is new in Python 3.2
     if not hasattr(unittest.TestCase, 'assertWarns'):
         def assertWarns(self, expected_warning, callable_obj=None,
@@ -392,7 +395,6 @@ class TestFileMixin(object):
 
     def setUp(self):
         super(TestFileMixin, self).setUp()
-        #self.h5fname = self._testFilename(self.testfname)
         self.h5file = tables.open_file(
             self.h5fname, title=self._getName(), **self.open_kwargs)
 

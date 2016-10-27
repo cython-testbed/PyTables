@@ -3,6 +3,7 @@
 """This test unit checks node attributes that are persistent (AttributeSet)."""
 
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 import datetime
 from distutils.version import LooseVersion
@@ -16,8 +17,9 @@ from tables import (IsDescription, Int32Atom, StringCol, IntCol, Int16Col,
 from tables.exceptions import DataTypeWarning
 from tables.parameters import NODE_CACHE_SLOTS
 from tables.tests import common
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+from six.moves import range
 
 
 class Record(IsDescription):
@@ -67,7 +69,92 @@ class CreateTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(self.h5file.get_node_attr(self.root.atable, 'attr1'),
                          "a" * attrlength)
         self.assertEqual(self.h5file.get_node_attr(self.root.anarray, 'attr1'),
-                         "n" * attrlength)
+                         "n" * attrlength) 
+        
+    def reopen(self):
+        # Reopen
+        if self.close:
+            if common.verbose:
+                print("(closing file version)")
+            self._reopen(mode='r+', node_cache_slots=self.node_cache_slots)
+            self.root = self.h5file.root  
+            
+    def check_missing(self,name):
+        self.reopen()
+        self.assertFalse(name in self.root.agroup._v_attrs)
+        self.assertFalse(name in self.root.atable.attrs)
+        self.assertFalse(name in self.root.anarray.attrs)       
+        
+                         
+    def check_name(self, name, val = ''):
+        """Check validity of attribute name filtering"""
+        self.check_missing(name)
+        # Using File methods
+        self.h5file.set_node_attr(self.root.agroup, name, val)
+        self.h5file.set_node_attr(self.root.atable, name, val)
+        self.h5file.set_node_attr(self.root.anarray, name, val)
+         # Check File methods
+        self.reopen()
+        self.assertEqual(self.h5file.get_node_attr(self.root.agroup, name),val)
+        self.assertEqual(self.h5file.get_node_attr(self.root.atable, name),val)
+        self.assertEqual(self.h5file.get_node_attr(self.root.anarray, name),val)
+        # Remove, file methods
+        self.h5file.del_node_attr(self.root.agroup, name)
+        self.h5file.del_node_attr(self.root.atable, name)
+        self.h5file.del_node_attr(self.root.anarray, name)
+        self.check_missing(name)
+        
+        # Using Node methods
+        self.root.agroup._f_setattr(name, val)
+        self.root.atable.set_attr(name, val)
+        self.root.anarray.set_attr(name, val)
+        # Check Node methods
+        self.reopen()
+        self.assertEqual(self.root.agroup._f_getattr(name), val)
+        self.assertEqual(self.root.atable.get_attr(name), val)
+        self.assertEqual(self.root.anarray.get_attr(name), val)  
+        self.root.agroup._f_delattr(name)
+        self.root.atable.del_attr(name)
+        self.root.anarray.del_attr(name)      
+        self.check_missing(name)
+        
+        # Using AttributeSet methods
+        setattr(self.root.agroup._v_attrs, name, val)
+        setattr(self.root.atable.attrs, name, val)
+        setattr(self.root.anarray.attrs, name, val)        
+        # Check AttributeSet methods
+        self.reopen()
+        self.assertEqual(getattr(self.root.agroup._v_attrs, name), val)
+        self.assertEqual(getattr(self.root.atable.attrs, name), val)
+        self.assertEqual(getattr(self.root.anarray.attrs, name), val)
+        delattr(self.root.agroup._v_attrs,name)
+        delattr(self.root.atable.attrs, name)
+        delattr(self.root.anarray.attrs, name)
+        self.check_missing(name)
+        
+        # Using dict []
+        self.root.agroup._v_attrs[name]=val
+        self.root.atable.attrs[name]=val
+        self.root.anarray.attrs[name]=val
+        # Check dict []
+        self.reopen()  
+        self.assertEqual(self.root.agroup._v_attrs[name], val)
+        self.assertEqual(self.root.atable.attrs[name], val)
+        self.assertEqual(self.root.anarray.attrs[name], val)  
+        del self.root.agroup._v_attrs[name]
+        del self.root.atable.attrs[name]
+        del self.root.anarray.attrs[name]
+        self.check_missing(name)
+        
+    def test01a_setAttributes(self):
+        """Checking attribute names validity"""
+        self.check_name('a')
+        self.check_name('a:b')
+        self.check_name('/a/b')
+        self.check_name('.')
+        self.assertRaises(ValueError, self.check_name, '')
+        self.assertRaises(ValueError, self.check_name, '__members__')
+        self.assertRaises(TypeError, self.check_name, 0)
 
     def test02_setAttributes(self):
         """Checking setting large string attributes (Node methods)"""
@@ -1497,7 +1584,7 @@ class NoSysAttrsClose(NoSysAttrsTestCase):
 
 
 class CompatibilityTestCase(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename('issue_368.h5')
+    h5fname = test_filename('issue_368.h5')
 
     @unittest.skipIf(LooseVersion(numpy.__version__) < '1.9.0',
                      'requires numpy >= 1.9')
@@ -1521,7 +1608,7 @@ class CompatibilityTestCase(common.TestFileMixin, TestCase):
 
 
 class PicklePy2UnpicklePy3TestCase(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename('issue_560.h5')
+    h5fname = test_filename('issue_560.h5')
 
     @unittest.skipIf(sys.version_info[0] == 3 and sys.version_info[1] < 4,
                      'bug not fixed on python3<=3.3.')
@@ -1590,7 +1677,7 @@ class EmbeddedNullsTestCase(common.TempFileMixin, TestCase):
 class VlenStrAttrTestCase(TestCase):
     def setUp(self):
         super(VlenStrAttrTestCase, self).setUp()
-        self.h5fname = self._testFilename('vlstr_attr.h5')
+        self.h5fname = test_filename('vlstr_attr.h5')
         self.h5file = tables.open_file(self.h5fname)
 
     def tearDown(self):
@@ -1627,7 +1714,7 @@ class VlenStrAttrTestCase(TestCase):
 
 
 class UnsupportedAttrTypeTestCase(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename('attr-u16.h5')
+    h5fname = test_filename('attr-u16.h5')
 
     def test00_unsupportedType(self):
         """Checking file with unsupported type."""

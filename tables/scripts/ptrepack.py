@@ -17,6 +17,7 @@ Pass the flag -h to this for help on usage.
 """
 
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 import time
 import os.path
@@ -29,7 +30,6 @@ from tables.group import Group
 from tables.leaf import Filters
 from tables.flavor import internal_flavor
 from tables.exceptions import OldIndexWarning, NoSuchNodeError, FlavorWarning
-from tables._past import previous_api
 
 # Global variables
 verbose = False
@@ -62,7 +62,6 @@ def newdst_group(dstfileh, dstgroup, title, filters):
         group = group2
     return group
 
-newdstGroup = previous_api(newdst_group)
 
 
 def recreate_indexes(table, dstfileh, dsttable):
@@ -84,7 +83,6 @@ def recreate_indexes(table, dstfileh, dsttable):
             # We don't specify the filters for the indexes
             colobj.create_index(filters=None)
 
-recreateIndexes = previous_api(recreate_indexes)
 
 
 def copy_leaf(srcfile, dstfile, srcnode, dstnode, title,
@@ -178,7 +176,6 @@ def copy_leaf(srcfile, dstfile, srcnode, dstnode, title,
     srcfileh.close()
     dstfileh.close()
 
-copyLeaf = previous_api(copy_leaf)
 
 
 def copy_children(srcfile, dstfile, srcgroup, dstgroup, title,
@@ -273,7 +270,6 @@ def copy_children(srcfile, dstfile, srcgroup, dstgroup, title,
     srcfileh.close()
     dstfileh.close()
 
-copyChildren = previous_api(copy_children)
 
 
 def _get_parser():
@@ -338,14 +334,18 @@ def _get_parser():
         '--complib', choices=(
             "zlib", "lzo", "bzip2", "blosc", "blosc:blosclz",
             "blosc:lz4", "blosc:lz4hc", "blosc:snappy",
-            "blosc:zlib"), default='zlib',
+            "blosc:zlib", "blosc:zstd"), default='zlib',
         help='''set the compression library to be used during the copy.
         Defaults to %(default)s''',
     )
     parser.add_argument(
         '--shuffle', type=int, choices=(0, 1),
-        help='''activate or not the shuffling filter (default is active if
+        help='''activate or not the shuffle filter (default is active if
         complevel > 0)''',
+    )
+    parser.add_argument(
+        '--bitshuffle', type=int, choices=(0, 1),
+        help='''activate or not the bitshuffle filter (not active by default)''',
     )
     parser.add_argument(
         '--fletcher32', type=int, choices=(0, 1),
@@ -356,7 +356,7 @@ def _get_parser():
         '--keep-source-filters', action='store_true', dest='keepfilters',
         help='''use the original filters in source files.
         The default is not doing that if any of --complevel, --complib,
-        --shuffle or --fletcher32 option is specified''',
+        --shuffle --bitshuffle or --fletcher32 option is specified''',
     )
     parser.add_argument(
         '--chunkshape', default='keep',
@@ -458,6 +458,7 @@ def main():
         args.complevel,
         args.complib,
         args.shuffle,
+        args.bitshuffle,
         args.fletcher32,
     )
     if (filter_params == (None,) * 4 or args.keepfilters):
@@ -470,12 +471,18 @@ def main():
                 args.shuffle = True
             else:
                 args.shuffle = False
+        if args.bitshuffle is None:
+            args.bitshuffle = False
+        if args.bitshuffle:
+            # Shuffle and bitshuffle are mutually exclusive
+            args.shuffle = False
         if args.complib is None:
             args.complib = "zlib"
         if args.fletcher32 is None:
             args.fletcher32 = False
         filters = Filters(complevel=args.complevel, complib=args.complib,
-                          shuffle=args.shuffle, fletcher32=args.fletcher32)
+                          shuffle=args.shuffle, bitshuffle=args.bitshuffle,
+                          fletcher32=args.fletcher32)
 
     # The start, stop and step params:
     start, stop, step = None, None, 1  # Defaults

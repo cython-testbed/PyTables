@@ -11,15 +11,22 @@
 ########################################################################
 
 """Functionality related with filters in a PyTables file."""
+from __future__ import absolute_import
 
 # Imports
 # =======
 import warnings
 import numpy
 
-from tables import (
-    utilsextension, blosc_compressor_list, blosc_compcode_to_compname)
-from tables.exceptions import FiltersWarning
+from . import utilsextension, blosc_compressor_list, blosc_compcode_to_compname
+from .exceptions import FiltersWarning
+import six
+from distutils.version import LooseVersion
+
+import tables
+from tables.req_versions import min_blosc_bitshuffle_version
+
+blosc_version = LooseVersion(tables.which_lib_version("blosc")[1])
 
 
 # Public variables
@@ -45,6 +52,7 @@ default_complib = 'zlib'
 _shuffle_flag = 0x1
 _fletcher32_flag = 0x2
 _rounding_flag = 0x4
+_bitshuffle_flag = 0x8
 
 
 # Classes
@@ -66,21 +74,26 @@ class Filters(object):
         compression.
     complib : str
         Specifies the compression library to be used. Right now, 'zlib' (the
-        default), 'lzo', 'bzip2' and 'blosc' are supported.  Additional
-        compressors for Blosc like 'blosc:blosclz' ('blosclz' is the default
-        in case the additional compressor is not specified), 'blosc:lz4',
-        'blosc:lz4hc', 'blosc:snappy' and 'blosc:zlib' are supported too.
-        Specifying a compression library which is not available in the
-        system issues a FiltersWarning and sets the library to the default
-        one.
+        default), 'lzo', 'bzip2' and 'blosc' are supported. Additional
+        compressors for Blosc like 'blosc:blosclz' ('blosclz' is the default in
+        case the additional compressor is not specified), 'blosc:lz4',
+        'blosc:lz4hc', 'blosc:snappy', 'blosc:zlib' and 'blosc:zstd' are
+        supported too. Specifying a compression library which is not available
+        in the system issues a FiltersWarning and sets the library to the
+        default one.
     shuffle : bool
-        Whether or not to use the *Shuffle*
-        filter in the HDF5 library. This is normally used to improve
-        the compression ratio. A false value disables shuffling and
-        a true one enables it. The default value depends on whether
-        compression is enabled or not; if compression is enabled,
-        shuffling defaults to be enabled, else shuffling is
-        disabled. Shuffling can only be used when compression is enabled.
+        Whether or not to use the *Shuffle* filter in the HDF5
+        library. This is normally used to improve the compression
+        ratio. A false value disables shuffling and a true one enables
+        it. The default value depends on whether compression is
+        enabled or not; if compression is enabled, shuffling defaults
+        to be enabled, else shuffling is disabled. Shuffling can only
+        be used when compression is enabled.
+    bitshuffle : bool
+        Whether or not to use the *BitShuffle* filter in the Blosc
+        library. This is normally used to improve the compression
+        ratio. A false value disables bitshuffling and a true one
+        enables it. The default value is disabled.
     fletcher32 : bool
         Whether or not to use the
         *Fletcher32* filter in the HDF5 library.
@@ -106,9 +119,9 @@ class Filters(object):
     This is a small example on using the Filters class::
 
         import numpy
-        from tables import *
+        import tables
 
-        fileh = open_file('test5.h5', mode='w')
+        fileh = tables.open_file('test5.h5', mode='w')
         atom = Float32Atom()
         filters = Filters(complevel=1, complib='blosc', fletcher32=True)
         arr = fileh.create_earray(fileh.root, 'earray', atom, (0,2),
@@ -156,7 +169,24 @@ class Filters(object):
 
         Whether the *Shuffle* filter is active or not.
 
+    .. attribute:: bitshuffle
+
+        Whether the *BitShuffle* filter is active or not (Blosc only).
+
     """
+
+    @property
+    def shuffle_bitshuffle(self):
+        """Encode NoShuffle (0), Shuffle (1) and BitShuffle (2) filters."""
+        if (self.shuffle and self.bitshuffle):
+            raise ValueError(
+                "Shuffle and BitShuffle cannot be active at the same time")
+        if not (self.shuffle or self.bitshuffle):
+            return 0
+        if self.shuffle:
+            return 1
+        if self.bitshuffle:
+            return 2
 
     @classmethod
     def _from_leaf(class_, leaf):
@@ -167,19 +197,24 @@ class Filters(object):
         if filters_dict is None:
             filters_dict = {}  # not chunked
 
-        kwargs = dict(complevel=0, shuffle=False, fletcher32=False,  # all off
-                      least_significant_digit=None, _new=False)
-        for (name, values) in filters_dict.iteritems():
+        # Keyword arguments are all off
+        kwargs = dict(complevel=0, shuffle=False, bitshuffle=False,
+                      fletcher32=False, least_significant_digit=None,
+                      _new=False)
+        for (name, values) in six.iteritems(filters_dict):
             if name == 'deflate':
                 name = 'zlib'
             if name in all_complibs:
                 kwargs['complib'] = name
                 if name == "blosc":
                     kwargs['complevel'] = values[4]
-                    # Shuffle filter is internal to blosc
-                    if values[5]:
+                    if values[5] == 1:
+                        # Shuffle filter is internal to blosc
                         kwargs['shuffle'] = True
-                    # In Blosc 1.3 another parameter is used for the compressor
+                    elif values[5] == 2:
+                        # Shuffle filter is internal to blosc
+                        kwargs['bitshuffle'] = True
+                    # From Blosc 1.3 on, parameter 6 is used for the compressor
                     if len(values) > 6:
                         cname = blosc_compcode_to_compname(values[6])
                         kwargs['complib'] = "blosc:%s" % cname
@@ -197,11 +232,11 @@ class Filters(object):
         """Create a new `Filters` object from a packed version.
 
         >>> Filters._unpack(0)
-        Filters(complevel=0, shuffle=False, fletcher32=False, least_significant_digit=None)
+        Filters(complevel=0, shuffle=False, bitshuffle=False, fletcher32=False, least_significant_digit=None)
         >>> Filters._unpack(0x101)
-        Filters(complevel=1, complib='zlib', shuffle=False, fletcher32=False, least_significant_digit=None)
+        Filters(complevel=1, complib='zlib', shuffle=False, bitshuffle=False, fletcher32=False, least_significant_digit=None)
         >>> Filters._unpack(0x30109)
-        Filters(complevel=9, complib='zlib', shuffle=True, fletcher32=True, least_significant_digit=None)
+        Filters(complevel=9, complib='zlib', shuffle=True, bitshuffle=False, fletcher32=True, least_significant_digit=None)
         >>> Filters._unpack(0x3010A)
         Traceback (most recent call last):
           ...
@@ -230,6 +265,7 @@ class Filters(object):
 
         # Byte 2: parameterless filters.
         kwargs['shuffle'] = packed & _shuffle_flag
+        kwargs['bitshuffle'] = packed & _bitshuffle_flag
         kwargs['fletcher32'] = packed & _fletcher32_flag
         has_rounding = packed & _rounding_flag
         packed >>= 8
@@ -256,6 +292,8 @@ class Filters(object):
         # Byte 2: parameterless filters.
         if self.shuffle:
             packed |= _shuffle_flag
+        if self.bitshuffle:
+            packed |= _bitshuffle_flag
         if self.fletcher32:
             packed |= _fletcher32_flag
         if self.least_significant_digit:
@@ -273,7 +311,7 @@ class Filters(object):
         return packed
 
     def __init__(self, complevel=0, complib=default_complib,
-                 shuffle=True, fletcher32=False,
+                 shuffle=True, bitshuffle=False, fletcher32=False,
                  least_significant_digit=None, _new=True):
 
         if not (0 <= complevel <= 9):
@@ -295,6 +333,7 @@ class Filters(object):
         complevel = int(complevel)
         complib = str(complib)
         shuffle = bool(shuffle)
+        bitshuffle = bool(bitshuffle)
         fletcher32 = bool(fletcher32)
         if least_significant_digit is not None:
             least_significant_digit = numpy.int8(least_significant_digit)
@@ -319,6 +358,24 @@ class Filters(object):
         self.shuffle = shuffle
         """Whether the *Shuffle* filter is active or not."""
 
+        self.bitshuffle = bitshuffle
+        """Whether the *BitShuffle* filter is active or not."""
+
+        if (self.complib and self.bitshuffle and
+            not self.complib.startswith('blosc')):
+            raise ValueError(
+                "BitShuffle can only be used inside Blosc")
+
+        if self.shuffle and self.bitshuffle:
+            # BitShuffle has priority in case both are specified
+            self.shuffle = False
+
+        if self.bitshuffle and blosc_version < min_blosc_bitshuffle_version:
+            raise ValueError(
+                "This Blosc library does not have support for the bitshuffle "
+                "filter.  Please update to Blosc >= %s" % \
+                min_blosc_bitshuffle_version)
+
         self.fletcher32 = fletcher32
         """Whether the *Fletcher32* filter is active or not."""
 
@@ -332,6 +389,7 @@ class Filters(object):
         if complevel != 0:  # compression enabled (-1 or > 0)
             args.append('complib=%r' % self.complib)
         args.append('shuffle=%s' % self.shuffle)
+        args.append('bitshuffle=%s' % self.bitshuffle)
         args.append('fletcher32=%s' % self.fletcher32)
         args.append(
             'least_significant_digit=%s' % self.least_significant_digit)
@@ -352,7 +410,7 @@ class Filters(object):
     # Overriding __eq__ blocks inheritance of __hash__ in 3.x
     # def __hash__(self):
     #    return hash((self.__class__, self.complevel, self.complib,
-    #                 self.shuffle, self.fletcher32))
+    #                 self.shuffle, self.bitshuffle, self.fletcher32))
 
     def copy(self, **override):
         """Get a copy of the filters, possibly overriding some arguments.
@@ -376,9 +434,9 @@ class Filters(object):
             ValueError: compression library ``None`` is not supported...
             >>> filters3 = filters1.copy(complevel=1, complib='zlib')
             >>> print(filters1)
-            Filters(complevel=0, shuffle=False, fletcher32=False, least_significant_digit=None)
+            Filters(complevel=0, shuffle=False, bitshuffle=False, fletcher32=False, least_significant_digit=None)
             >>> print(filters3)
-            Filters(complevel=1, complib='zlib', shuffle=False, fletcher32=False, least_significant_digit=None)
+            Filters(complevel=1, complib='zlib', shuffle=False, bitshuffle=False, fletcher32=False, least_significant_digit=None)
             >>> filters1.copy(foobar=42)
             Traceback (most recent call last):
             ...

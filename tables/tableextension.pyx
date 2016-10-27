@@ -27,14 +27,14 @@ import sys
 import numpy
 from time import time
 
-from tables.description import Col
-from tables.exceptions import HDF5ExtError
-from tables.conditions import call_on_recarr
-from tables.utilsextension import (get_nested_field, atom_from_hdf5_type,
+from .description import Col
+from .exceptions import HDF5ExtError
+from .conditions import call_on_recarr
+from .utilsextension import (get_nested_field, atom_from_hdf5_type,
   create_nested_type, hdf5_to_np_ext_type, create_nested_type, platform_byteorder,
   pttype_to_hdf5, pt_special_kinds, npext_prefixes_to_ptkinds, hdf5_class_to_string,
   H5T_STD_I64)
-from tables.utils import SizeType
+from .utils import SizeType
 
 from utilsextension cimport get_native_type, cstr_to_pystr
 
@@ -64,7 +64,6 @@ from definitions cimport (hid_t, herr_t, hsize_t, htri_t,
 
 from lrucacheextension cimport ObjectCache, NumCache
 
-from tables._past import previous_api, previous_api_property
 
 
 #-----------------------------------------------------------------
@@ -205,7 +204,7 @@ cdef class Table(Leaf):
                                       self.nrows, self.chunkshape[0],
                                       fill_data,
                                       self.filters.complevel, encoded_complib,
-                                      self.filters.shuffle,
+                                      self.filters.shuffle_bitshuffle,
                                       self.filters.fletcher32,
                                       data)
     if self.dataset_id < 0:
@@ -469,7 +468,7 @@ cdef class Table(Leaf):
     # Get the pointer to the buffer data area
     self.wbuf = recarr.data
 
-  def _append_records(self, int nrecords):
+  def _append_records(self, hsize_t nrecords):
     cdef int ret
     cdef hsize_t nrows
 
@@ -639,7 +638,7 @@ cdef class Table(Leaf):
 
   def _remove_rows(self, hsize_t start, hsize_t stop, long step):
     cdef size_t rowsize
-    cdef hsize_t nrecords, nrecords2
+    cdef hsize_t nrecords=0, nrecords2
     cdef hsize_t i
 
     if step == 1:
@@ -659,21 +658,21 @@ cdef class Table(Leaf):
                             0, NULL, <char *>&nrecords2)
       # Set the caches to dirty
       self._dirtycache = True
-      # Return the number of records removed
-      return nrecords
     elif step == -1:
-      self._remove_rows(self, stop+1, start+1, 1)
+      nrecords = self._remove_rows(stop+1, start+1, 1)
     elif step >= 1:
       # always want to go through the space backwards
-      for i in range(stop - step, start - step, -step):
-        self._remove_rows(self, i, i+1, 1)
+      for i in range(stop - step, <ssize_t>start - step, -step):
+        nrecords += self._remove_rows(i, i+1, 1)
     elif step <= -1:
       # always want to go through the space backwards
       for i in range(start, stop, step):
-        self._remove_rows(self, i, i+1, 1)
+        nrecords += self._remove_rows(i, i+1, 1)
     else:
       raise ValueError("step size may not be 0.")
 
+    # Return the number of records removed
+    return nrecords
 
 cdef class Row:
   """Table row iterator and field accessor.
@@ -732,19 +731,6 @@ cdef class Row:
   cdef object  _table_file, _table_path
   cdef object  modified_fields
   cdef object  seqcache_key
-
-  # Deprecated API
-  indexChunk = previous_api_property('indexchunk')
-  indexValid = previous_api_property('indexvalid')
-  indexValues = previous_api_property('indexvalues')
-  bufcoordsData = previous_api_property('bufcoords_data')
-  indexValuesData = previous_api_property('index_values_data')
-  chunkmapData = previous_api_property('chunkmap_data')
-  indexValidData = previous_api_property('index_valid_data')
-  whereCond = previous_api_property('wherecond')
-  iterseqMaxElements = previous_api_property('iterseq_max_elements')
-  IObuf = previous_api_property('iobuf')
-  IObufcpy = previous_api_property('iobufcpy')
 
   # The nrow() method has been converted into a property, which is handier
   property nrow:
@@ -1214,9 +1200,9 @@ cdef class Row:
 
     # We can't reuse existing buffers in this context
     self._init_loop(start, stop, step, None, None)
-    istart, istop, istep = (self.start, self.stop, self.step)
-    inrowsinbuf, inextelement, inrowsread = (self.nrowsinbuf, istart, istart)
-    istartb, startr = (self.startb, 0)
+    istart, istop, istep = self.start, self.stop, self.step
+    inrowsinbuf, inextelement, inrowsread = self.nrowsinbuf, istart, istart
+    istartb, startr = self.startb, 0
     i = istart
     if 0 < istep:
       while i < istop:
@@ -1283,7 +1269,6 @@ cdef class Row:
     self._riterator = 0  # out of iterator
     return
 
-  _fillCol = previous_api(_fill_col)
 
   def append(self):
     """Add a new row of data to the end of the dataset.
@@ -1349,12 +1334,10 @@ cdef class Row:
       # Reset the buffer unsaved counter
       self._unsaved_nrows = 0
 
-  _flushBufferedRows = previous_api(_flush_buffered_rows)
 
   def _get_unsaved_nrows(self):
     return self._unsaved_nrows
 
-  _getUnsavedNrows = previous_api(_get_unsaved_nrows)
 
   def update(self):
     """Change the data of the current row in the dataset.
@@ -1444,7 +1427,6 @@ cdef class Row:
     # Mark the modified fields' indexes as dirty.
     table._mark_columns_as_dirty(self.modified_fields)
 
-  _flushModRows = previous_api(_flush_mod_rows)
 
   def __contains__(self, item):
     """__contains__(item)

@@ -1,6 +1,7 @@
 # -*- coding: latin-1 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 
 import numpy
@@ -13,9 +14,10 @@ from tables import (
 )
 from tables.tests import common
 from tables.tests.common import allequal
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename, blosc_version
 from tables.tests.common import PyTablesTestCase as TestCase
 from tables.utils import byteorders
+from six.moves import range
 
 
 class C:
@@ -26,6 +28,7 @@ class BasicTestCase(common.TempFileMixin, TestCase):
     compress = 0
     complib = "zlib"
     shuffle = 0
+    bitshuffle = 0
     fletcher32 = 0
     flavor = "numpy"
 
@@ -42,6 +45,7 @@ class BasicTestCase(common.TempFileMixin, TestCase):
         filters = tables.Filters(complevel=self.compress,
                                  complib=self.complib,
                                  shuffle=self.shuffle,
+                                 bitshuffle=self.bitshuffle,
                                  fletcher32=self.fletcher32)
         vlarray = self.h5file.create_vlarray(group, 'vlarray1',
                                              atom=Int32Atom(),
@@ -115,6 +119,10 @@ class BasicTestCase(common.TempFileMixin, TestCase):
         if self.shuffle != vlarray.filters.shuffle and common.verbose:
             print("Error in shuffle. Class:", self.__class__.__name__)
             print("self, vlarray:", self.shuffle, vlarray.filters.shuffle)
+        self.assertEqual(self.shuffle, vlarray.filters.shuffle)
+        if self.bitshuffle != vlarray.filters.bitshuffle and common.verbose:
+            print("Error in shuffle. Class:", self.__class__.__name__)
+            print("self, vlarray:", self.bitshuffle, vlarray.filters.bitshuffle)
         self.assertEqual(self.shuffle, vlarray.filters.shuffle)
         if self.fletcher32 != vlarray.filters.fletcher32 and common.verbose:
             print("Error in fletcher32. Class:", self.__class__.__name__)
@@ -276,6 +284,14 @@ class BloscShuffleComprTestCase(BasicTestCase):
     shuffle = 1
     complib = "blosc"
 
+@unittest.skipIf(not common.blosc_avail,
+                 'BLOSC compression library not available')
+@unittest.skipIf(blosc_version < common.min_blosc_bitshuffle_version,
+                 'BLOSC >= %s required' % common.min_blosc_bitshuffle_version)
+class BloscBitShuffleComprTestCase(BasicTestCase):
+    compress = 9
+    bitshuffle = 1
+    complib = "blosc"
 
 @unittest.skipIf(not common.blosc_avail,
                  'BLOSC compression library not available')
@@ -320,6 +336,14 @@ class BloscZlibComprTestCase(BasicTestCase):
     compress = 9
     shuffle = 1
     complib = "blosc:zlib"
+
+@unittest.skipIf(not common.blosc_avail,
+                 'BLOSC compression library not available')
+@unittest.skipIf('zstd' not in tables.blosc_compressor_list(), 'zstd required')
+class BloscZstdComprTestCase(BasicTestCase):
+    compress = 9
+    shuffle = 1
+    complib = "blosc:zstd"
 
 
 @unittest.skipIf(not common.lzo_avail, 'LZO compression library not available')
@@ -1260,12 +1284,12 @@ class TypesTestCase(common.TempFileMixin, TestCase):
 
         vlarray = self.h5file.create_vlarray(
             '/', "VLStringAtom", atom=VLStringAtom())
-        vlarray.append("asd")
-        vlarray.append("asd\xe4")
-        vlarray.append(u"aaana")
-        vlarray.append("")
+        vlarray.append(b"asd")
+        vlarray.append(b"asd\xe4")
+        vlarray.append(b"aaana")
+        vlarray.append(b"")
         # Check for ticket #62.
-        self.assertRaises(TypeError, vlarray.append, ["foo", "bar"])
+        self.assertRaises(TypeError, vlarray.append, [b"foo", b"bar"])
         # `VLStringAtom` makes no encoding assumptions.  See ticket #51.
         self.assertRaises(UnicodeEncodeError, vlarray.append, u"asd\xe4")
 
@@ -1282,10 +1306,10 @@ class TypesTestCase(common.TempFileMixin, TestCase):
             print("First row in vlarray ==>", row[0])
 
         self.assertEqual(vlarray.nrows, 4)
-        self.assertEqual(row[0], "asd")
-        self.assertEqual(row[1], "asd\xe4")
-        self.assertEqual(row[2], "aaana")
-        self.assertEqual(row[3], "")
+        self.assertEqual(row[0], b"asd")
+        self.assertEqual(row[1], b"asd\xe4")
+        self.assertEqual(row[2], b"aaana")
+        self.assertEqual(row[3], b"")
         self.assertEqual(len(row[0]), 3)
         self.assertEqual(len(row[1]), 4)
         self.assertEqual(len(row[2]), 5)
@@ -1301,14 +1325,14 @@ class TypesTestCase(common.TempFileMixin, TestCase):
 
         vlarray = self.h5file.create_vlarray(
             '/', "VLStringAtom", atom=VLStringAtom())
-        vlarray.append("asd")
-        vlarray.append(u"aaana")
+        vlarray.append(b"asd")
+        vlarray.append(b"aaana")
 
         # Modify values
-        vlarray[0] = "as4"
-        vlarray[1] = "aaanc"
-        self.assertRaises(ValueError, vlarray.__setitem__, 1, "shrt")
-        self.assertRaises(ValueError, vlarray.__setitem__, 1, "toolong")
+        vlarray[0] = b"as4"
+        vlarray[1] = b"aaanc"
+        self.assertRaises(ValueError, vlarray.__setitem__, 1, b"shrt")
+        self.assertRaises(ValueError, vlarray.__setitem__, 1, b"toolong")
 
         if self.reopen:
             name = vlarray._v_pathname
@@ -2412,7 +2436,7 @@ class ReadRangeTestCase(common.TempFileMixin, TestCase):
 
         # Fill it with 100 rows with variable length
         for i in range(self.nrows):
-            vlarray.append(range(i))
+            vlarray.append(list(range(i)))
 
     def test01_start(self):
         """Checking reads with only a start value"""
@@ -2819,7 +2843,7 @@ class GetItemRangeTestCase(common.TempFileMixin, TestCase):
 
         # Fill it with 100 rows with variable length
         for i in range(self.nrows):
-            vlarray.append(range(i))
+            vlarray.append(list(range(i)))
 
     def test01_start(self):
         """Checking reads with only a start value"""
@@ -3145,7 +3169,7 @@ class SetRangeTestCase(common.TempFileMixin, TestCase):
 
         # Fill it with 100 rows with variable length
         for i in range(self.nrows):
-            vlarray.append(range(i))
+            vlarray.append(list(range(i)))
 
     def test01_start(self):
         """Checking updates that modifies a complete row"""
@@ -3451,9 +3475,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         array1 = self.h5file.create_vlarray(
             self.h5file.root, 'array1', arr, "title array1")
         array1.flavor = "python"
-        array1.append("a string")
-        array1.append("")  # an empty row
-        array1.append("another string")
+        array1.append(b"a string")
+        array1.append(b"")  # an empty row
+        array1.append(b"another string")
 
         if self.close:
             if common.verbose:
@@ -3886,7 +3910,7 @@ class ChunkshapeTestCase(common.TempFileMixin, TestCase):
 class VLUEndianTestCase(TestCase):
     def setUp(self):
         super(VLUEndianTestCase, self).setUp()
-        self.h5fname = self._testFilename('vlunicode_endian.h5')
+        self.h5fname = test_filename('vlunicode_endian.h5')
         self.h5file = tables.open_file(self.h5fname)
 
     def tearDown(self):
@@ -4092,7 +4116,7 @@ class SizeInMemoryPropertyTestCase(common.TempFileMixin, TestCase):
         self.create_array(atom, complevel)
         self.array.flavor = flavor
         expected_size = 0
-        for i in xrange(10):
+        for i in range(10):
             row = numpy.arange((i + 1) * 10, dtype='i4')
             self.array.append(row)
             expected_size += row.nbytes
@@ -4125,7 +4149,7 @@ class SizeInMemoryPropertyTestCase(common.TempFileMixin, TestCase):
         complevel = 0
         self.create_array(atom, complevel)
         obj = [1, 2, 3]
-        for i in xrange(10):
+        for i in range(10):
             self.array.append(obj)
         pickle_array = atom.toarray(obj)
         expected_size = 10 * pickle_array.nbytes
@@ -4340,11 +4364,13 @@ def suite():
         theSuite.addTest(unittest.makeSuite(ZlibComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscShuffleComprTestCase))
+        theSuite.addTest(unittest.makeSuite(BloscBitShuffleComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscBloscLZComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscLZ4ComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscLZ4HCComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscSnappyComprTestCase))
         theSuite.addTest(unittest.makeSuite(BloscZlibComprTestCase))
+        theSuite.addTest(unittest.makeSuite(BloscZstdComprTestCase))
         theSuite.addTest(unittest.makeSuite(LZOComprTestCase))
         theSuite.addTest(unittest.makeSuite(Bzip2ComprTestCase))
         theSuite.addTest(unittest.makeSuite(TypesReopenTestCase))

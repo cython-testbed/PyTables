@@ -11,22 +11,25 @@
 ########################################################################
 
 """Here is defined the AttributeSet class."""
+from __future__ import absolute_import
 
 import re
 import sys
 import warnings
-import cPickle
+import six.moves.cPickle
 import numpy
 
-from tables import hdf5extension
-from tables.utils import SizeType
-from tables.registry import class_name_dict
-from tables.exceptions import ClosedNodeError, PerformanceWarning
-from tables.path import check_name_validity
-from tables.undoredo import attr_to_shadow
-from tables.filters import Filters
+from . import hdf5extension
+from .utils import SizeType
+from .registry import class_name_dict
+from .exceptions import ClosedNodeError, PerformanceWarning
+from .path import check_attribute_name
+from .undoredo import attr_to_shadow
+from .filters import Filters
 
-from tables._past import previous_api
+from six.moves import map
+import six
+
 
 # System attributes
 SYS_ATTRS = ["CLASS", "VERSION", "TITLE", "NROWS", "EXTDIM",
@@ -193,9 +196,10 @@ class AttributeSet(hdf5extension.AttributeSet, object):
     def _g_getnode(self):
         return self._v__nodefile._get_node(self._v__nodepath)
 
-    _v_node = property(_g_getnode, None, None,
-                       "The :class:`Node` instance this attribute set is "
-                       "associated with.")
+    @property
+    def _v_node(self):
+        """The :class:`Node` instance this attribute set is associated with."""
+        return self._g_getnode()
 
     def __init__(self, node):
         """Create the basic structures to keep the attribute information.
@@ -260,7 +264,6 @@ class AttributeSet(hdf5extension.AttributeSet, object):
         # hdf5extension operations:
         self._g_new(node)
 
-    _g_updateNodeLocation = previous_api(_g_update_node_location)
 
     def _f_list(self, attrset='user'):
         """Get a list of attribute names.
@@ -310,7 +313,7 @@ class AttributeSet(hdf5extension.AttributeSet, object):
             # This format was used during the first 1.2 releases, just
             # for string defaults.
             try:
-                retval = cPickle.loads(value)
+                retval = six.moves.cPickle.loads(value)
                 retval = numpy.array(retval)
             except ImportError:
                 retval = None  # signal error avoiding exception
@@ -318,10 +321,10 @@ class AttributeSet(hdf5extension.AttributeSet, object):
             # This is a big hack, but we don't have other way to recognize
             # pickled filters of PyTables 1.x files.
             value = _old_filters_re.sub(_new_filters_sub, value, 1)
-            retval = cPickle.loads(value)  # pass unpickling errors through
+            retval = six.moves.cPickle.loads(value)  # pass unpickling errors through
         elif maybe_pickled:
             try:
-                retval = cPickle.loads(value)
+                retval = six.moves.cPickle.loads(value)
             # except cPickle.UnpicklingError:
             # It seems that pickle may raise other errors than UnpicklingError
             # Perhaps it would be better just an "except:" clause?
@@ -334,10 +337,10 @@ class AttributeSet(hdf5extension.AttributeSet, object):
                 # unplicked as bytestrings. Hence try 'latin1' first.
                 # Ref: http://bugs.python.org/issue6784
                 try:
-                    retval = cPickle.loads(value, encoding='latin1')
+                    retval = six.moves.cPickle.loads(value, encoding='latin1')
                 except TypeError:
                     try:
-                        retval = cPickle.loads(value, encoding='bytes')
+                        retval = six.moves.cPickle.loads(value, encoding='bytes')
                     except:
                         retval = value
                 except:
@@ -354,7 +357,7 @@ class AttributeSet(hdf5extension.AttributeSet, object):
                 # explaining how the user can tell where the problem was.
                 retval = value
             # Additional check for allowing a workaround for #307
-            if isinstance(retval, unicode) and retval == u'':
+            if isinstance(retval, six.text_type) and retval == u'':
                 retval = numpy.array(retval)[()]
         elif name == 'FILTERS' and format_version >= (2, 0):
             retval = Filters._unpack(value)
@@ -364,7 +367,7 @@ class AttributeSet(hdf5extension.AttributeSet, object):
                 retval = value
             else:
                 retval = value.decode('utf-8')
-        elif (issysattrname(name) and isinstance(value, (bytes, unicode)) and
+        elif (issysattrname(name) and isinstance(value, (bytes, six.text_type)) and
               not isinstance(value, str) and not _field_fill_re.match(name)):
             # system attributes should always be str
             if sys.version_info[0] < 3:
@@ -407,10 +410,10 @@ class AttributeSet(hdf5extension.AttributeSet, object):
         # (only in case it has not been converted yet)
         # Fixes ticket #59
         if (stvalue is value and
-                type(value) in (bool, bytes, int, float, complex, unicode,
+                type(value) in (bool, bytes, int, float, complex, six.text_type,
                                 numpy.unicode_)):
             # Additional check for allowing a workaround for #307
-            if isinstance(value, unicode) and len(value) == 0:
+            if isinstance(value, six.text_type) and len(value) == 0:
                 stvalue = numpy.array(u'')
             else:
                 stvalue = numpy.array(value)
@@ -455,7 +458,7 @@ class AttributeSet(hdf5extension.AttributeSet, object):
         attrnames = self._v_attrnames
 
         # Check for name validity
-        check_name_validity(name)
+        check_attribute_name(name)
 
         nodefile._check_writable()
 
@@ -483,7 +486,6 @@ be ready to see PyTables asking for *lots* of memory and possibly slow I/O"""
     def _g_log_add(self, name):
         self._v__nodefile._log('ADDATTR', self._v__nodepath, name)
 
-    _g_logAdd = previous_api(_g_log_add)
 
     def _g_del_and_log(self, name):
         nodefile = self._v__nodefile
@@ -492,7 +494,6 @@ be ready to see PyTables asking for *lots* of memory and possibly slow I/O"""
         nodefile._log('DELATTR', node_pathname, name)
         attr_to_shadow(nodefile, node_pathname, name)
 
-    _g_delAndLog = previous_api(_g_del_and_log)
 
     def _g__delattr(self, name):
         """Delete a PyTables attribute.
@@ -691,12 +692,10 @@ class NotLoggedAttributeSet(AttributeSet):
     def _g_log_add(self, name):
         pass
 
-    _g_logAdd = previous_api(_g_log_add)
 
     def _g_del_and_log(self, name):
         self._g__delattr(name)
 
-    _g_delAndLog = previous_api(_g_del_and_log)
 
 ## Local Variables:
 ## mode: python

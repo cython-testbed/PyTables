@@ -3,6 +3,7 @@
 """Run all test cases."""
 
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 
 import numpy
@@ -114,7 +115,8 @@ if __name__ == '__main__':
     common.parse_argv(sys.argv)
 
     hdf5_version = get_tuple_version(tables.which_lib_version("hdf5")[0])
-    if hdf5_version < min_hdf5_version:
+    hdf5_version_str = "%s.%s.%s" % hdf5_version
+    if hdf5_version_str < min_hdf5_version:
         print("*Warning*: HDF5 version is lower than recommended: %s < %s" %
               (hdf5_version, min_hdf5_version))
 

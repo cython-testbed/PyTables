@@ -11,6 +11,7 @@
 ########################################################################
 
 """Test module for queries on datasets."""
+from __future__ import absolute_import
 
 import re
 import sys
@@ -25,6 +26,10 @@ from tables.tests import common
 from tables.tests.common import unittest
 from tables.tests.common import verbosePrint as vprint
 from tables.tests.common import PyTablesTestCase as TestCase
+
+import six
+from six.moves import range
+
 from numpy import (log10, exp, log, abs, sqrt, sin, cos, tan,
                    arcsin, arccos, arctan)
 
@@ -56,9 +61,9 @@ type_info = {
     'int16': (numpy.int16, int),
     'uint16': (numpy.uint16, int),
     'int32': (numpy.int32, int),
-    'uint32': (numpy.uint32, long),
-    'int64': (numpy.int64, long),
-    'uint64': (numpy.uint64, long),
+    'uint32': (numpy.uint32, int),
+    'int64': (numpy.int64, int),
+    'uint64': (numpy.uint64, int),
     'float32': (numpy.float32, float),
     'float64': (numpy.float64, float),
     'complex64': (numpy.complex64, complex),
@@ -90,10 +95,10 @@ if hasattr(numpy, 'float16'):
 #    type_info['complex256'] = (numpy.complex256, complex)
 
 sctype_from_type = dict((type_, info[0])
-                        for (type_, info) in type_info.iteritems())
+                        for (type_, info) in six.iteritems(type_info))
 """Maps PyTables types to NumPy scalar types."""
 nxtype_from_type = dict((type_, info[1])
-                        for (type_, info) in type_info.iteritems())
+                        for (type_, info) in six.iteritems(type_info))
 """Maps PyTables types to Numexpr types."""
 
 heavy_types = frozenset(['uint8', 'int16', 'uint16', 'float32', 'complex64'])
@@ -113,7 +118,7 @@ def append_columns(classdict, shape=()):
 
     """
     heavy = common.heavy
-    for (itype, type_) in enumerate(sorted(type_info.iterkeys())):
+    for (itype, type_) in enumerate(sorted(six.iterkeys(type_info))):
         if not heavy and type_ in heavy_types:
             continue  # skip heavy type in non-heavy mode
         colpos = itype + 1
@@ -210,9 +215,9 @@ def fill_table(table, shape, nrows):
     size = int(numpy.prod(shape, dtype=SizeType))
 
     row, value = table.row, 0
-    for nrow in xrange(nrows):
+    for nrow in range(nrows):
         data = numpy.arange(value, value + size).reshape(shape)
-        for (type_, sctype) in sctype_from_type.iteritems():
+        for (type_, sctype) in six.iteritems(sctype_from_type):
             if not heavy and type_ in heavy_types:
                 continue  # skip heavy type in non-heavy mode
             colname = 'c_%s' % type_
@@ -355,7 +360,7 @@ def create_test_method(type_, op, extracond, func=None):
                 'lbound': left_bound,
                 'rbound': right_bound,
                 'func_bound': func_bound}
-    for (bname, bvalue) in condvars.iteritems():
+    for (bname, bvalue) in six.iteritems(condvars):
         if type_ == 'string':
             bvalue = str_format % bvalue
         bvalue = nxtype_from_type[type_](bvalue)

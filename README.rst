@@ -6,6 +6,16 @@
    :alt: Join the chat at https://gitter.im/PyTables/PyTables
    :target: https://gitter.im/PyTables/PyTables
 
+.. image:: https://travis-ci.org/PyTables/PyTables.svg?branch=develop
+   :target: https://travis-ci.org/PyTables/PyTables
+
+.. image:: https://ci.appveyor.com/api/projects/status/github/PyTables/PyTables?branch=develop&svg=true
+   :target: https://ci.appveyor.com/project/PyTablesBot/pytables
+
+.. image:: https://codeclimate.com/github/PyTables/PyTables/badges/gpa.svg
+   :target: https://codeclimate.com/github/PyTables/PyTables
+   :alt: Code Climate
+
 :URL: http://www.pytables.org/
 
 
@@ -95,7 +105,8 @@ optional.
 Installation
 ------------
 
-1. Make sure you have HDF5 version 1.8.4 or above.
+1. Make sure you have HDF5 version 1.8.4 or above. HDF5 1.10.x is not
+supported.
 
    On OSX you can install HDF5 using `Homebrew <http://brew.sh>`_::
 

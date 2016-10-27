@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 
 from tables.tests import common
 from tables.tests.common import verbose
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
+from six.moves import range
 
 
 # Check indexes from PyTables version 2.0
@@ -147,12 +149,12 @@ class IndexesTestCase(common.TestFileMixin, TestCase):
 
 # Check indexes from PyTables version 2.0
 class Indexes2_0TestCase(IndexesTestCase):
-    h5fname = TestCase._testFilename("indexes_2_0.h5")
+    h5fname = test_filename("indexes_2_0.h5")
 
 
 # Check indexes from PyTables version 2.1
 class Indexes2_1TestCase(IndexesTestCase):
-    h5fname = TestCase._testFilename("indexes_2_1.h5")
+    h5fname = test_filename("indexes_2_1.h5")
 
 
 def suite():

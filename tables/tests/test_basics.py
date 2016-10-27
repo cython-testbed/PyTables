@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from __future__ import absolute_import
 import os
 import sys
-import Queue
+import six.moves.queue
 import shutil
 import platform
 import tempfile
 import warnings
 import threading
 import subprocess
+import six
+from six.moves import range
+from six.moves import zip
 
 try:
     import multiprocessing as mp
@@ -34,7 +38,7 @@ from tables.flavor import all_flavors, array_of_flavor
 from tables.parameters import NODE_CACHE_SLOTS
 from tables.description import descr_from_dtype, dtype_from_descr
 from tables.tests import common
-from tables.tests.common import unittest
+from tables.tests.common import unittest, test_filename
 from tables.tests.common import PyTablesTestCase as TestCase
 
 
@@ -153,7 +157,7 @@ class OpenFileTestCase(common.TempFileMixin, TestCase):
     def test00_newFile_unicode_filename(self):
         temp_dir = tempfile.mkdtemp()
         try:
-            h5fname = unicode(os.path.join(temp_dir, 'test.h5'))
+            h5fname = six.text_type(os.path.join(temp_dir, 'test.h5'))
             with tables.open_file(h5fname, 'w') as h5file:
                 self.assertTrue(h5file, tables.File)
         finally:
@@ -1276,7 +1280,7 @@ class CheckFileTestCase(common.TempFileMixin, TestCase):
         """Checking opening of a generic HDF5 file."""
 
         # Open an existing generic HDF5 file
-        h5fname = self._testFilename("ex-noattr.h5")
+        h5fname = test_filename("ex-noattr.h5")
         with tables.open_file(h5fname, mode="r") as h5file:
             # Check for some objects inside
 
@@ -1310,7 +1314,7 @@ class CheckFileTestCase(common.TempFileMixin, TestCase):
         # uncommented in Group.py!                                        #
         ###################################################################
 
-        h5fname = self._testFilename('smpl_unsupptype.h5')
+        h5fname = test_filename('smpl_unsupptype.h5')
         with tables.open_file(h5fname) as h5file:
             with self.assertWarns(UserWarning):
                 node = h5file.get_node('/CompoundChunked')
@@ -1320,7 +1324,7 @@ class CheckFileTestCase(common.TempFileMixin, TestCase):
         """Checking opening of HDF5 files containing scalar dataset of
         UnImlemented type."""
 
-        with tables.open_file(self._testFilename("scalar.h5")) as h5file:
+        with tables.open_file(test_filename("scalar.h5")) as h5file:
             with self.assertWarns(UserWarning):
                 node = h5file.get_node('/variable length string')
             self.assertTrue(isinstance(node, UnImplemented))
@@ -1329,7 +1333,7 @@ class CheckFileTestCase(common.TempFileMixin, TestCase):
         """Checking that an UnImplemented object cannot be copied."""
 
         # Open an existing generic HDF5 file
-        h5fname = self._testFilename("smpl_unsupptype.h5")
+        h5fname = test_filename("smpl_unsupptype.h5")
         with tables.open_file(h5fname, mode="r") as h5file:
             self.assertWarns(UserWarning, h5file.get_node, '/CompoundChunked')
             with warnings.catch_warnings():
@@ -1350,7 +1354,7 @@ class CheckFileTestCase(common.TempFileMixin, TestCase):
         # Open an existing generic HDF5 file
         # We don't need to wrap this in a try clause because
         # it has already been tried and the warning will not happen again
-        h5fname2 = self._testFilename("ex-noattr.h5")
+        h5fname2 = test_filename("ex-noattr.h5")
         with tables.open_file(h5fname2, mode="r") as h5file2:
                 # An unsupported object (the deprecated H5T_ARRAY type in
             # Array, from pytables 0.8 on)
@@ -1402,13 +1406,13 @@ class ThreadingTestCase(common.TempFileMixin, TestCase):
                 q.put('OK')
 
         threads = []
-        q = Queue.Queue()
-        for i in xrange(10):
+        q = six.moves.queue.Queue()
+        for i in range(10):
             t = threading.Thread(target=run, args=(filename, q))
             t.start()
             threads.append(t)
 
-        for i in xrange(10):
+        for i in range(10):
             self.assertEqual(q.get(), 'OK')
 
         for t in threads:
@@ -1631,7 +1635,7 @@ class StateTestCase(common.TempFileMixin, TestCase):
         self.h5file.create_group('/', 'test1')
         self.h5file.create_group('/', 'test2')
         self.h5file.close()
-        self.assertRaises(ClosedFileError, self.h5file.walk_nodes().next)
+        self.assertRaises(ClosedFileError, next, self.h5file.walk_nodes())
 
     def test15_fileAttrClosed(self):
         """Test setting and deleting a node attribute in a closed file."""
@@ -2060,7 +2064,7 @@ class FilePropertyTestCase(TestCase):
 # Test for reading a file that uses Blosc and created on a big-endian platform
 @unittest.skipIf(not common.blosc_avail, 'Blosc not available')
 class BloscBigEndian(common.TestFileMixin, TestCase):
-    h5fname = TestCase._testFilename("blosc_bigendian.h5")
+    h5fname = test_filename("blosc_bigendian.h5")
 
     def test00_bigendian(self):
         """Checking compatibility with Blosc on big-endian machines."""
@@ -2111,7 +2115,7 @@ class BloscSubprocess(TestCase):
         try:
             size = int(3e5)
             sa = numpy.fromiter(((i, i**2, i//3)
-                                 for i in xrange(size)), 'i4,i8,f8')
+                                 for i in range(size)), 'i4,i8,f8')
             with tables.open_file(h5fname, 'w') as h5file:
                 h5file.create_table(
                     h5file.root, 'table', sa,
@@ -2385,13 +2389,13 @@ class TestDescription(TestCase):
         # see gh-42
         # the name used is a valid ASCII identifier passed as unicode
         # string
-        d = {unicode('name'): tables.Int16Col()}
+        d = {six.text_type('name'): tables.Int16Col()}
         descr = Description(d)
         self.assertEqual(sorted(descr._v_names), sorted(d.keys()))
         self.assertTrue(isinstance(descr._v_dtype, numpy.dtype))
         keys = []
-        for key in d.keys():
-            if isinstance(key, unicode):
+        for key in list(d.keys()):
+            if isinstance(key, six.text_type):
                 keys.append(key.encode())
             else:
                 keys.append(key)
@@ -2462,12 +2466,12 @@ class TestCol(TestCase):
 
 class TestSysattrCompatibility(TestCase):
     def test_open_python2(self):
-        h5fname = self._testFilename("python2.h5")
+        h5fname = test_filename("python2.h5")
         with tables.open_file(h5fname, "r") as h5file:
             self.assertTrue(h5file.isopen)
 
     def test_open_python3(self):
-        h5fname = self._testFilename("python3.h5")
+        h5fname = test_filename("python3.h5")
         with tables.open_file(h5fname, "r") as h5file:
             self.assertTrue(h5file.isopen)
 

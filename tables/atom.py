@@ -11,21 +11,25 @@
 ########################################################################
 
 """Atom classes for describing dataset contents."""
+from __future__ import absolute_import
 
 # Imports
 # =======
 import re
 import sys
 import inspect
-import cPickle
 import warnings
 
 import numpy
 
-from tables.utils import SizeType
-from tables.misc.enum import Enum
+from .utils import SizeType
+from .misc.enum import Enum
 
-from tables._past import previous_api
+import six.moves.cPickle
+import six
+
+import warnings
+from .exceptions import FlavorWarning
 
 # Public variables
 # ================
@@ -116,7 +120,7 @@ def _abstract_atom_init(deftype, defvalue):
 def _normalize_shape(shape):
     """Check that the `shape` is safe to be used and return it as a tuple."""
 
-    if isinstance(shape, (int, numpy.integer, long)):
+    if isinstance(shape, (int, numpy.integer, int)):
         if shape < 1:
             raise ValueError("shape value must be greater than 0: %d"
                              % shape)
@@ -127,7 +131,7 @@ def _normalize_shape(shape):
         raise TypeError("shape must be an integer or sequence: %r"
                         % (shape,))
 
-    ## XXX Get from HDF5 library if possible.
+    # XXX Get from HDF5 library if possible.
     # HDF5 does not support ranks greater than 32
     if len(shape) > 32:
         raise ValueError(
@@ -218,7 +222,7 @@ class MetaAtom(type):
 
 # Atom classes
 # ============
-class Atom(object):
+class Atom(six.with_metaclass(MetaAtom, object)):
     """Defines the type of atomic cells stored in a dataset.
 
     The meaning of *atomic* is that individual elements of a cell can
@@ -313,9 +317,6 @@ class Atom(object):
 
     """
 
-    # Register data for all subclasses.
-    __metaclass__ = MetaAtom
-
     # Class methods
     # ~~~~~~~~~~~~~
     @classmethod
@@ -365,6 +366,16 @@ class Atom(object):
             >>> Atom.from_dtype(numpy.dtype('Float64'))
             Float64Atom(shape=(), dflt=0.0)
 
+        Note: for easier use in Python 3, where all strings lead to the
+        Unicode dtype, this dtype will also generate a StringAtom. Since
+        this is only viable for strings that are castable as ascii, a
+        warning is issued.
+
+            >>> Atom.from_dtype(numpy.dtype('U20')) # doctest: +SKIP
+            Atom.py:392: FlavorWarning: support for unicode type is very limited,
+                and only works for strings that can be cast as ascii
+            StringAtom(itemsize=20, shape=(), dflt=b'')
+
         """
         basedtype = dtype.base
         if basedtype.names:
@@ -375,6 +386,13 @@ class Atom(object):
                              % dtype)
         if basedtype.kind == 'S':  # can not reuse something like 'string80'
             itemsize = basedtype.itemsize
+            return class_.from_kind('string', itemsize, dtype.shape, dflt)
+        elif basedtype.kind == 'U':
+            # workaround for unicode type (standard string type in Python 3)
+            warnings.warn("support for unicode type is very limited, "
+                          "and only works for strings that can be cast as ascii", FlavorWarning)
+            itemsize = basedtype.itemsize // 4
+            assert str(itemsize) in basedtype.str, "something went wrong in handling unicode."
             return class_.from_kind('string', itemsize, dtype.shape, dflt)
         # Most NumPy types have direct correspondence with PyTables types.
         return class_.from_type(basedtype.name, dtype.shape, dflt)
@@ -476,17 +494,23 @@ class Atom(object):
 
     # Properties
     # ~~~~~~~~~~
-    size = property(
-        lambda self: self.dtype.itemsize,
-        None, None, "Total size in bytes of the atom.")
-    recarrtype = property(
-        lambda self: str(self.dtype.shape) + self.dtype.base.str[1:],
-        None, None, "String type to be used in numpy.rec.array().")
-    ndim = property(
-        lambda self: len(self.shape), None, None,
+    @property
+    def size(self):
+        """Total size in bytes of the atom."""
+        return self.dtype.itemsize
+
+    @property
+    def recarrtype(self):
+        """String type to be used in numpy.rec.array()."""
+        return str(self.dtype.shape) + self.dtype.base.str[1:]
+
+    @property
+    def ndim(self):
         """The number of dimensions of the atom.
 
-        .. versionadded:: 2.4""")
+        .. versionadded:: 2.4"""
+        return len(self.shape)
+
 
     # Special methods
     # ~~~~~~~~~~~~~~~
@@ -600,11 +624,13 @@ class StringAtom(Atom):
     """
 
     kind = 'string'
-    itemsize = property(
-        lambda self: self.dtype.base.itemsize,
-        None, None, "Size in bytes of a sigle item in the atom.")
     type = 'string'
     _defvalue = b''
+
+    @property
+    def itemsize(self):
+        "Size in bytes of a sigle item in the atom."
+        return self.dtype.base.itemsize
 
     def __init__(self, itemsize, shape=(), dflt=_defvalue):
         if not hasattr(itemsize, '__int__') or int(itemsize) < 0:
@@ -671,39 +697,6 @@ def _create_numeric_class(baseclass, itemsize):
     return type('%sAtom' % prefix, (baseclass,), classdict)
 
 
-def _generate_integral_classes():
-    """Generate all integral classes."""
-
-    for baseclass in [IntAtom, UIntAtom]:
-        for itemsize in [1, 2, 4, 8]:
-            newclass = _create_numeric_class(baseclass, itemsize)
-            yield newclass
-
-
-def _generate_floating_classes():
-    """Generate all floating classes."""
-
-    itemsizes = [4, 8]
-
-    # numpy >= 1.6
-    if hasattr(numpy, 'float16'):
-        itemsizes.insert(0, 2)
-    if hasattr(numpy, 'float96'):
-        itemsizes.append(12)
-    if hasattr(numpy, 'float128'):
-        itemsizes.append(16)
-
-    for itemsize in itemsizes:
-        newclass = _create_numeric_class(FloatAtom, itemsize)
-        yield newclass
-
-
-# Create all numeric atom classes.
-#for _classgen in [_generate_integral_classes, _generate_floating_classes]:
-#    for _newclass in _classgen():
-#        exec('%s = _newclass' % _newclass.__name__)
-#del _classgen, _newclass
-
 Int8Atom = _create_numeric_class(IntAtom, 1)
 Int16Atom = _create_numeric_class(IntAtom, 2)
 Int32Atom = _create_numeric_class(IntAtom, 4)
@@ -739,12 +732,14 @@ class ComplexAtom(Atom):
     # using the old bottom-level complex classes.
 
     kind = 'complex'
-    itemsize = property(
-        lambda self: self.dtype.base.itemsize,
-        None, None, "Size in bytes of a sigle item in the atom.")
     _deftype = 'complex128'
     _defvalue = 0j
     _isizes = [8, 16]
+
+    @property
+    def itemsize(self):
+         "Size in bytes of a sigle item in the atom."
+         return self.dtype.base.itemsize
 
     # Only instances have a `type` attribute, so complex types must be
     # registered by hand.
@@ -764,10 +759,8 @@ class ComplexAtom(Atom):
         Atom.__init__(self, self.type, shape, dflt)
 
 
-class _ComplexErrorAtom(ComplexAtom):
+class _ComplexErrorAtom(six.with_metaclass(type, ComplexAtom)):
     """Reminds the user to stop using the old complex atom names."""
-
-    __metaclass__ = type  # do not register anything about this class
 
     def __init__(self, shape=(), dflt=ComplexAtom._defvalue):
         raise TypeError(
@@ -917,9 +910,10 @@ class EnumAtom(Atom):
 
     # Properties
     # ~~~~~~~~~~
-    itemsize = property(
-        lambda self: self.dtype.base.itemsize,
-        None, None, "Size in bytes of a sigle item in the atom.")
+    @property
+    def itemsize(self):
+        """Size in bytes of a single item in the atom."""
+        return self.dtype.base.itemsize
 
     # Private methods
     # ~~~~~~~~~~~~~~~
@@ -958,7 +952,6 @@ class EnumAtom(Atom):
             raise NotImplementedError("only scalar concrete values "
                                       "are supported for the moment, sorry")
 
-    _checkBase = previous_api(_checkbase)
 
     def _get_init_args(self):
         """Get a dictionary of instance constructor arguments."""
@@ -1017,6 +1010,30 @@ class EnumAtom(Atom):
     # def __hash__(self):
     #    return hash((self.__class__, self.enum, self.shape, self.dflt,
     #                 self.base))
+
+
+class ReferenceAtom(Atom):
+    """Defines an atom of type object to read references.
+    This atom is read-only.
+    """
+
+    kind = 'reference'
+    type = 'object'
+    _deftype = 'NoneType'
+    _defvalue = None
+
+    # Properties
+    # ~~~~~~~~~~
+    @property
+    def itemsize(self):
+        """Size in bytes of a single item in the atom."""
+        return self.dtype.base.itemsize
+
+    def __init__(self, shape=()):
+        Atom.__init__(self, self.type, shape, self._defvalue)
+
+    def __repr__(self):
+        return 'ReferenceAtom(shape=%s)' % (self.shape,)
 
 # Pseudo-atom classes
 # ===================
@@ -1108,7 +1125,7 @@ class VLStringAtom(_BufferedAtom):
     base = UInt8Atom()
 
     def _tobuffer(self, object_):
-        if isinstance(object_, unicode):
+        if isinstance(object_, six.text_type):
             warnings.warn("Storing non bytestrings in VLStringAtom is "
                           "deprecated.", DeprecationWarning)
         elif not isinstance(object_, bytes):
@@ -1154,9 +1171,9 @@ class VLUnicodeAtom(_BufferedAtom):
             if isinstance(object_, bytes):
                 warnings.warn("Storing bytestrings in VLUnicodeAtom is "
                               "deprecated.", DeprecationWarning)
-            elif not isinstance(object_, unicode):
+            elif not isinstance(object_, six.text_type):
                 raise TypeError("object is not a string: %r" % (object_,))
-            ustr = unicode(object_)
+            ustr = six.text_type(object_)
             uarr = numpy.array(ustr, dtype='U')
             return numpy.ndarray(
                 buffer=uarr, dtype=self.base.dtype, shape=len(ustr))
@@ -1168,7 +1185,7 @@ class VLUnicodeAtom(_BufferedAtom):
         if isinstance(object_, bytes):
             warnings.warn("Storing bytestrings in VLUnicodeAtom is "
                           "deprecated.", DeprecationWarning)
-        elif not isinstance(object_, unicode):
+        elif not isinstance(object_, six.text_type):
             raise TypeError("object is not a string: %r" % (object_,))
         return numpy.unicode_(object_)
 
@@ -1200,7 +1217,7 @@ class ObjectAtom(_BufferedAtom):
     base = UInt8Atom()
 
     def _tobuffer(self, object_):
-        return cPickle.dumps(object_, cPickle.HIGHEST_PROTOCOL)
+        return six.moves.cPickle.dumps(object_, six.moves.cPickle.HIGHEST_PROTOCOL)
 
     def fromarray(self, array):
         # We have to check for an empty array because of a possible
@@ -1208,4 +1225,4 @@ class ObjectAtom(_BufferedAtom):
         # record when in fact it is empty.
         if array.size == 0:
             return None
-        return cPickle.loads(array.tostring())
+        return six.moves.cPickle.loads(array.tostring())

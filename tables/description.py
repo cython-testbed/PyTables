@@ -15,16 +15,19 @@
 # Imports
 # =======
 from __future__ import print_function
+from __future__ import absolute_import
 import sys
 import copy
 import warnings
 
 import numpy
 
-from tables import atom
-from tables.path import check_name_validity
+from . import atom
+from .path import check_name_validity
 
-from tables._past import previous_api, previous_api_property
+import six
+from six.moves import zip
+
 
 # Public variables
 # ================
@@ -49,7 +52,7 @@ def same_position(oldmethod):
 
 # Column classes
 # ==============
-class Col(atom.Atom):
+class Col(six.with_metaclass(type, atom.Atom)):
     """Defines a non-nested column.
 
     Col instances are used as a means to declare the different properties of a
@@ -89,9 +92,6 @@ class Col(atom.Atom):
         will be randomly selected.
 
     """
-
-    # Avoid mangling atom class data.
-    __metaclass__ = type
 
     _class_from_prefix = {}  # filled as column classes are created
     """Maps column prefixes to column classes."""
@@ -248,12 +248,12 @@ def _generate_col_classes():
 
     # Abstract classes are not in the class map.
     cprefixes = ['Int', 'UInt', 'Float', 'Time']
-    for (kind, kdata) in atom.atom_map.iteritems():
+    for (kind, kdata) in six.iteritems(atom.atom_map):
         if hasattr(kdata, 'kind'):  # atom class: non-fixed item size
             atomclass = kdata
             cprefixes.append(atomclass.prefix())
         else:  # dictionary: fixed item size
-            for atomclass in kdata.itervalues():
+            for atomclass in six.itervalues(kdata):
                 cprefixes.append(atomclass.prefix())
 
     # Bottom-level complex classes are not in the type map, of course.
@@ -435,10 +435,6 @@ class Description(object):
 
     """
 
-    _v_colObjects = previous_api_property('_v_colobjects')
-    _v_nestedFormats = previous_api_property('_v_nested_formats')
-    _v_nestedNames = previous_api_property('_v_nested_names')
-    _v_nestedDesct = previous_api_property('_v_nested_descr')
 
     def __init__(self, classdict, nestedlvl=-1, validate=True):
 
@@ -465,7 +461,7 @@ class Description(object):
         cols_no_pos = []  # just column names
 
         # Check for special variables and convert column descriptions
-        for (name, descr) in classdict.iteritems():
+        for (name, descr) in six.iteritems(classdict):
             if name.startswith('_v_'):
                 if name in newdict:
                     # print("Warning!")
@@ -582,9 +578,8 @@ class Description(object):
         names = self._v_names
         fmts = self._v_nested_formats
         self._v_nested_names = names[:]  # Important to do a copy!
-        self._v_nested_descr = [(names[i], fmts[i]) for i in range(len(names))]
-        for i in range(len(names)):
-            name = names[i]
+        self._v_nested_descr = list(zip(names, fmts))
+        for i, name in enumerate(names):
             new_object = self._v_colobjects[name]
             if isinstance(new_object, Description):
                 new_object._g_set_nested_names_descr()
@@ -594,7 +589,6 @@ class Description(object):
                 # set the _v_is_nested flag
                 self._v_is_nested = True
 
-    _g_setNestedNamesDescr = previous_api(_g_set_nested_names_descr)
 
     def _g_set_path_names(self):
         """Compute the pathnames for arbitrary nested descriptions.
@@ -658,7 +652,7 @@ class Description(object):
                 # children lists, a string signals that no more children
                 # remain to be processed, so we are done with the
                 # description at the top of the stack.
-                assert isinstance(head, basestring)
+                assert isinstance(head, six.string_types)
                 # Assign the computed set of descendent column paths.
                 desc._v_pathnames = cols
                 if len(stack) > 0:
@@ -672,7 +666,6 @@ class Description(object):
                     parentCols.extend(colPaths)
                 # (Nothing is pushed, we are done with this description.)
 
-    _g_setPathNames = previous_api(_g_set_path_names)
 
     def _f_walk(self, type='All'):
         """Iterate over nested columns.
@@ -694,9 +687,8 @@ type can only take the parameters 'All', 'Col' or 'Description'.""")
             object = stack.pop(0)  # pop at the front so as to ensure the order
             if type in ["All", "Description"]:
                 yield object  # yield description
-            names = object._v_names
-            for i in range(len(names)):
-                new_object = object._v_colobjects[names[i]]
+            for name in object._v_names:
+                new_object = object._v_colobjects[name]
                 if isinstance(new_object, Description):
                     stack.append(new_object)
                 else:
@@ -738,10 +730,9 @@ class MetaIsDescription(type):
         # Return a new class with the "columns" attribute filled
         return type.__new__(cls, classname, bases, newdict)
 
-metaIsDescription = previous_api(MetaIsDescription)
 
 
-class IsDescription(object):
+class IsDescription(six.with_metaclass(MetaIsDescription, object)):
     """Description of the structure of a table or nested column.
 
     This class is designed to be used as an easy, yet meaningful way to
@@ -785,8 +776,6 @@ class IsDescription(object):
 
     """
 
-    __metaclass__ = MetaIsDescription
-
 
 def descr_from_dtype(dtype_):
     """Get a description instance and byteorder from a (nested) NumPy dtype."""
@@ -804,7 +793,7 @@ def descr_from_dtype(dtype_):
                     "are not supported yet, sorry")
             fbyteorder = byteorder
         # Non-nested column
-        if kind in 'biufSc':
+        if kind in 'biufSUc':
             col = Col.from_dtype(dtype, pos=pos)
         # Nested column
         elif kind == 'V' and dtype.shape in [(), (1,)]:

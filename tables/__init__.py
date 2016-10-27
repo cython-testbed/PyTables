@@ -18,6 +18,7 @@ PyTables is a package for managing hierarchical datasets and designed
 to efficiently cope with extremely large amounts of data.
 
 """
+from __future__ import absolute_import
 
 
 import os
@@ -60,10 +61,17 @@ if os.name == 'nt':
     # In order to improve diagnosis of a common Windows dependency
     # issue, we explicitly test that we can load the HDF5 dll before
     # loading tables.utilsextensions.
-    if not _load_library('hdf5dll.dll', ctypes.cdll.LoadLibrary):
+    import sys
+    hdf5_dlls = ['hdf5.dll', 'hdf5dll.dll']
+    if hasattr(sys, 'gettotalrefcount'):  # running with debug interpreter
+        hdf5_dlls = ['hdf5_D.dll', 'hdf5ddll.dll']
+    for dll in hdf5_dlls:
+        if _load_library(dll, ctypes.cdll.LoadLibrary):
+            break
+    else:
         raise ImportError(
-            'Could not load "hdf5dll.dll", please ensure'
-            ' that it can be found in the system path')
+            'Could not load any of %s, please ensure'
+            ' that it can be found in the system path' % hdf5_dlls)
 
     # Some PyTables binary distributions place the dependency DLLs in the
     # tables package directory.
@@ -79,11 +87,10 @@ if os.name == 'nt':
 
 
 # Necessary imports to get versions stored on the cython extension
-from tables.utilsextension import (
+from .utilsextension import (
     get_pytables_version, get_hdf5_version, blosc_compressor_list,
     blosc_compcode_to_compname_ as blosc_compcode_to_compname,
-    blosc_get_complib_info_ as blosc_get_complib_info,
-    getPyTablesVersion, getHDF5Version)  # Pending Deprecation!
+    blosc_get_complib_info_ as blosc_get_complib_info)
 
 
 __version__ = get_pytables_version()
@@ -106,32 +113,30 @@ hdf5Version = hdf5_version
 
 """
 
-from tables.utilsextension import (is_hdf5_file, is_pytables_file,
-    which_lib_version, set_blosc_max_threads, silence_hdf5_messages,
-    # Pending Deprecation!
-    isHDF5File, isPyTablesFile, whichLibVersion, setBloscMaxThreads,
-    silenceHDF5Messages)
+from .utilsextension import (is_hdf5_file, is_pytables_file,
+                             which_lib_version, set_blosc_max_threads,
+                             silence_hdf5_messages)
 
-from tables.misc.enum import Enum
-from tables.atom import *
-from tables.flavor import restrict_flavors
-from tables.description import *
-from tables.filters import Filters
+from .misc.enum import Enum
+from .atom import *
+from .flavor import restrict_flavors
+from .description import *
+from .filters import Filters
 
 # Import the user classes from the proper modules
-from tables.exceptions import *
-from tables.file import File, open_file, copy_file, openFile, copyFile
-from tables.node import Node
-from tables.group import Group
-from tables.leaf import Leaf
-from tables.table import Table, Cols, Column
-from tables.array import Array
-from tables.carray import CArray
-from tables.earray import EArray
-from tables.vlarray import VLArray
-from tables.unimplemented import UnImplemented, Unknown
-from tables.expression import Expr
-from tables.tests import print_versions, test
+from .exceptions import *
+from .file import File, open_file, copy_file
+from .node import Node
+from .group import Group
+from .leaf import Leaf
+from .table import Table, Cols, Column
+from .array import Array
+from .carray import CArray
+from .earray import EArray
+from .vlarray import VLArray
+from .unimplemented import UnImplemented, Unknown
+from .expression import Expr
+from .tests import print_versions, test
 
 
 # List here only the objects we want to be publicly available
@@ -177,13 +182,6 @@ __all__ = [
     'File',
     # Expr class
     'Expr',
-    #
-    # Pending deprecation!!!
-    #
-    'isHDF5File', 'isPyTablesFile', 'whichLibVersion',
-    'copyFile', 'openFile', 'print_versions', 'test',
-    'split_type', 'restrict_flavors', 'setBloscMaxThreads',
-    'silenceHDF5Messages',
 ]
 
 if 'Float16Atom' in locals():
@@ -191,7 +189,7 @@ if 'Float16Atom' in locals():
     __all__.extend(('Float16Atom', 'Float16Col'))
 
 
-from tables.utilsextension import _broken_hdf5_long_double
+from .utilsextension import _broken_hdf5_long_double
 if not _broken_hdf5_long_double():
     if 'Float96Atom' in locals():
         __all__.extend(('Float96Atom', 'Float96Col'))
@@ -203,8 +201,8 @@ if not _broken_hdf5_long_double():
 
 else:
 
-    from tables import atom as _atom
-    from tables import description as _description
+    from . import atom as _atom
+    from . import description as _description
     try:
         del _atom.Float96Atom, _atom.Complex192Col
         del _description.Float96Col, _description.Complex192Col
