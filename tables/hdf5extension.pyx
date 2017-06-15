@@ -68,7 +68,7 @@ from cpython.bytes cimport (PyBytes_AsString, PyBytes_FromStringAndSize,
 from cpython.unicode cimport PyUnicode_DecodeUTF8
 
 
-from definitions cimport (const_char, uintptr_t, hid_t, herr_t, hsize_t, hvl_t,
+from definitions cimport (uintptr_t, hid_t, herr_t, hsize_t, hvl_t,
   H5S_seloper_t, H5D_FILL_VALUE_UNDEFINED,
   H5O_TYPE_UNKNOWN, H5O_TYPE_GROUP, H5O_TYPE_DATASET, H5O_TYPE_NAMED_DATATYPE,
   H5L_TYPE_ERROR, H5L_TYPE_HARD, H5L_TYPE_SOFT, H5L_TYPE_EXTERNAL,
@@ -1217,6 +1217,10 @@ cdef class Array(Leaf):
       atom_ = atom
       shape = shape[:-len(atom_.shape)]
     self.disk_type_id = atom_to_hdf5_type(atom_, self.byteorder)
+    if self.disk_type_id < 0:
+      raise HDF5ExtError(
+        "Problems creating the %s: invalid disk type ID for atom %s" % (
+            self.__class__.__name__, atom_))
 
     # Allocate space for the dimension axis info and fill it
     dims = numpy.array(shape, dtype=numpy.intp)
@@ -1885,6 +1889,10 @@ cdef class VLArray(Leaf):
     # Get the HDF5 type of the *scalar* atom
     scatom = atom.copy(shape=())
     self.base_type_id = atom_to_hdf5_type(scatom, self.byteorder)
+    if self.base_type_id < 0:
+      raise HDF5ExtError(
+        "Problems creating the %s: invalid base type ID for atom %s" % (
+            self.__class__.__name__, scatom))
 
     # Allocate space for the dimension axis info
     rank = len(atom.shape)

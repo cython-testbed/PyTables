@@ -103,10 +103,12 @@ if sys.version_info < min_python_version:
 print("* Using Python %s" % sys.version.splitlines()[0])
 
 # Minumum equired versions for numpy, numexpr and HDF5
-exec(open(os.path.join('tables', 'req_versions.py')).read())
+with open(os.path.join('tables', 'req_versions.py')) as fd:
+    exec(fd.read())
 
 
-VERSION = open('VERSION').read().strip()
+with open('VERSION') as fd:
+    VERSION = fd.read().strip()
 
 # ----------------------------------------------------------------------
 
@@ -134,6 +136,7 @@ def add_from_flags(envname, flag_key, dirs):
     for flag in os.environ.get(envname, "").split():
         if flag.startswith(flag_key):
             dirs.append(flag[len(flag_key):])
+
 
 if os.name == 'posix':
     prefixes = ('/usr/local', '/sw', '/opt', '/opt/local', '/usr', '/')
@@ -341,21 +344,23 @@ def get_hdf5_version(headername):
     major_version = -1
     minor_version = -1
     release_version = -1
-    for line in open(headername):
-        if 'H5_VERS_MAJOR' in line:
-            major_version = int(re.split("\s*", line)[2])
-        if 'H5_VERS_MINOR' in line:
-            minor_version = int(re.split("\s*", line)[2])
-        if 'H5_VERS_RELEASE' in line:
-            release_version = int(re.split("\s*", line)[2])
-        if (major_version != -1 and minor_version != -1 and
-                release_version != -1):
-            break
+    with open(headername) as fd:
+        for line in fd:
+            if 'H5_VERS_MAJOR' in line:
+                major_version = int(re.split("\s*", line)[2])
+            if 'H5_VERS_MINOR' in line:
+                minor_version = int(re.split("\s*", line)[2])
+            if 'H5_VERS_RELEASE' in line:
+                release_version = int(re.split("\s*", line)[2])
+            if (major_version != -1 and minor_version != -1 and
+                    release_version != -1):
+                break
     if (major_version == -1 or minor_version == -1 or
             release_version == -1):
         exit_with_error("Unable to detect HDF5 library version!")
     return LooseVersion("%s.%s.%s" % (major_version, minor_version,
                                       release_version))
+
 
 # Get the Blosc version provided the 'blosc.h' header
 def get_blosc_version(headername):
@@ -405,12 +410,12 @@ elif os.name == 'nt':
         if os.environ['APPVEYOR'] and os.environ['BUILDWHEEL']:
             # Conda HDF5 is linked to zlib.dll (from conda package zlib)
             # but szip.dll is not included in conda
-            dll_files = [os.environ['PYTHON']+'\\Library\\bin\\zlib.dll']
+            dll_files = [os.environ['CONDA_PREFIX']+'\\Library\\bin\\zlib.dll']
     except KeyError:
         # Update these paths for your own system!
         dll_files = [
-                 #'\\windows\\system\\zlib1.dll',
-                 #'\\windows\\system\\szip.dll',
+                 # '\\windows\\system\\zlib1.dll',
+                 # '\\windows\\system\\szip.dll',
                  ]
 
     if debug:
@@ -451,6 +456,7 @@ LFLAGS = os.environ.get('LFLAGS', '').split()
 # is not a good idea.
 CFLAGS = os.environ.get('CFLAGS', '').split()
 LIBS = os.environ.get('LIBS', '').split()
+CONDA_PREFIX = os.environ.get('CONDA_PREFIX', '')
 # We start using pkg-config since some distributions are putting HDF5
 # (and possibly other libraries) in exotic locations.  See issue #442.
 if distutils.spawn.find_executable(PKG_CONFIG):
@@ -490,6 +496,10 @@ for arg in args:
         # sys.argv.remove(arg)
     elif arg.find('--use-pkgconfig') == 0:
         USE_PKGCONFIG = arg.split('=')[1]
+        CONDA_PREFIX = ''
+        sys.argv.remove(arg)
+    elif arg.find('--no-conda') == 0:
+        CONDA_PREFIX = ''
         sys.argv.remove(arg)
 
 USE_PKGCONFIG = True if USE_PKGCONFIG.upper() == 'TRUE' else False
@@ -502,9 +512,11 @@ print('* USE_PKGCONFIG:', USE_PKGCONFIG)
 if not HDF5_DIR and os.name == 'nt':
     import ctypes.util
     if not debug:
-        libdir = ctypes.util.find_library('hdf5.dll') or ctypes.util.find_library('hdf5dll.dll')
+        libdir = (ctypes.util.find_library('hdf5.dll') or
+                  ctypes.util.find_library('hdf5dll.dll'))
     else:
-        libdir = ctypes.util.find_library('hdf5_D.dll') or ctypes.util.find_library('hdf5ddll.dll')
+        libdir = (ctypes.util.find_library('hdf5_D.dll') or
+                  ctypes.util.find_library('hdf5ddll.dll'))
     # Like 'C:\\Program Files\\HDF Group\\HDF5\\1.8.8\\bin\\hdf5dll.dll'
     if libdir:
         # Strip off the filename
@@ -513,6 +525,12 @@ if not HDF5_DIR and os.name == 'nt':
         HDF5_DIR = os.path.dirname(libdir)
         print("* Found HDF5 using system PATH ('%s')" % libdir)
 
+
+if CONDA_PREFIX:
+    print('* Found conda env: ``%s``' % CONDA_PREFIX)
+    if os.name == 'nt':
+        CONDA_PREFIX += '\\Library'
+
 # The next flag for the C compiler is needed for finding the C headers for
 # the Cython extensions
 CFLAGS.append("-Isrc")
@@ -520,6 +538,7 @@ CFLAGS.append("-Isrc")
 # Force the 1.8.x HDF5 API even if the library as been compiled to use the
 # 1.6.x API by default
 CFLAGS.extend([
+    "-DH5_USE_18_API",
     "-DH5Acreate_vers=2",
     "-DH5Aiterate_vers=2",
     "-DH5Dcreate_vers=2",
@@ -565,6 +584,10 @@ for (package, location) in [(hdf5_package, HDF5_DIR),
               % (lzo1_package.name, lzo2_package.name))
         continue  # do not use LZO 1 if LZO 2 is available
 
+    # if a package location is not specified, try to find it in conda env
+    if not location and CONDA_PREFIX:
+        location = CONDA_PREFIX
+
     (hdrdir, libdir, rundir) = package.find_directories(
         location, use_pkgconfig=USE_PKGCONFIG)
 
@@ -577,18 +600,14 @@ for (package, location) in [(hdf5_package, HDF5_DIR),
                 "Unsupported HDF5 version! HDF5 v%s+ required. "
                 "Found version v%s" % (min_hdf5_version, hdf5_version))
 
-        if hdf5_version >= "1.10":
-            exit_with_error(
-                "HDF5 1.10 release not supported. HDF5 v1.8 release required. "
-                "Found version v%s" % (hdf5_version))
-
         if os.name == 'nt' and hdf5_version < "1.8.10":
             # Change in DLL naming happened in 1.8.10
             hdf5_old_dll_name = 'hdf5dll' if not debug else 'hdf5ddll'
             package.library_name = hdf5_old_dll_name
             package.runtime_name = hdf5_old_dll_name
             _platdep['HDF5'] = [hdf5_old_dll_name, hdf5_old_dll_name]
-            _, libdir, rundir = package.find_directories(location, use_pkgconfig=USE_PKGCONFIG)
+            _, libdir, rundir = package.find_directories(
+                location, use_pkgconfig=USE_PKGCONFIG)
 
     # check if the library is in the standard compiler paths
     if not libdir and package.target_function:
@@ -649,7 +668,7 @@ for (package, location) in [(hdf5_package, HDF5_DIR),
             print_warning(
                 "This Blosc version does not support the BitShuffle filter. "
                 "Minimum desirable version is %s.  Found version: %s" % (
-                min_blosc_bitshuffle_version, blosc_version))
+                    min_blosc_bitshuffle_version, blosc_version))
 
     if not rundir:
         loc = {
@@ -681,7 +700,6 @@ if lzo2_enabled:
     lzo_package = lzo2_package
 else:
     lzo_package = lzo1_package
-
 
 # ------------------------------------------------------------------------------
 
@@ -721,8 +739,8 @@ cython_extfiles = get_cython_extfiles(cython_extnames)
 
 # Update the version.h file if this file is newer
 if newer('VERSION', 'src/version.h'):
-    open('src/version.h', 'w').write(
-        '#define PYTABLES_VERSION "%s"\n' % VERSION)
+    with open('src/version.h', 'w') as fd:
+        fd.write('#define PYTABLES_VERSION "%s"\n' % VERSION)
 
 # --------------------------------------------------------------------
 
@@ -730,10 +748,11 @@ if newer('VERSION', 'src/version.h'):
 # PyTables contains data files for tests.
 setuptools_kwargs['zip_safe'] = False
 
-setuptools_kwargs['extras_require'] = {}
 setuptools_kwargs['install_requires'] = requirements
+
 # Detect packages automatically.
 setuptools_kwargs['packages'] = find_packages(exclude=['*.bench'])
+
 # Entry points for automatic creation of scripts.
 setuptools_kwargs['entry_points'] = {
     'console_scripts': [
@@ -832,12 +851,12 @@ if 'BLOSC' not in optional_libs:
     # AVX2
     # Detection code for AVX2 only works for gcc/clang, not for MSVC yet
     if ('avx2' in cpu_flags and
-        compiler_has_flags(compiler, ["-mavx2"])):
-        print('AVX2 detected')
-        CFLAGS.append('-DSHUFFLE_AVX2_ENABLED')
-        CFLAGS.append('-mavx2')
-        blosc_sources += [f for f in glob.glob('c-blosc/blosc/*.c')
-                          if 'avx2' in f]
+            compiler_has_flags(compiler, ["-mavx2"])):
+                print('AVX2 detected')
+                CFLAGS.append('-DSHUFFLE_AVX2_ENABLED')
+                CFLAGS.append('-mavx2')
+                blosc_sources += [f for f in glob.glob('c-blosc/blosc/*.c')
+                                  if 'avx2' in f]
 else:
     ADDLIBS += ['blosc']
 
@@ -996,5 +1015,11 @@ interactively save and retrieve large amounts of data.
     ext_modules=extensions,
     cmdclass=cmdclass,
     data_files=data_files,
+    extra_require={
+        'doc': [
+            'sphinx >= 1.1',
+            'sphinx_rtd_theme',
+            'numpydoc',
+            'ipython']},
     **setuptools_kwargs
 )

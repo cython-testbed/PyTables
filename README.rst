@@ -97,7 +97,7 @@ To compile PyTables you will need, at least, a recent version of HDF5
 (C flavor) library, the Zlib compression library and the NumPy and
 Numexpr packages. Besides, it comes with support for the Blosc, LZO
 and bzip2 compressor libraries. Blosc is mandatory, but PyTables comes
-with Blosc sources so, although it si recommended to have Blosc
+with Blosc sources so, although it is recommended to have Blosc
 installed in your system, you don't absolutely need to install it
 separately.  LZO and bzip2 compression libraries are, however,
 optional.
@@ -105,8 +105,7 @@ optional.
 Installation
 ------------
 
-1. Make sure you have HDF5 version 1.8.4 or above. HDF5 1.10.x is not
-supported.
+1. Make sure you have HDF5 version 1.8.4 or above.
 
    On OSX you can install HDF5 using `Homebrew <http://brew.sh>`_::
 

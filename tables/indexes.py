@@ -20,20 +20,20 @@ from .node import NotLoggedMixin
 from .carray import CArray
 from .earray import EArray
 from . import indexesextension
+import six
 
 
 # Declarations for inheriting
 
 
-class CacheArray(NotLoggedMixin, EArray, indexesextension.CacheArray):
+class CacheArray(indexesextension.CacheArray, NotLoggedMixin, EArray):
     """Container for keeping index caches of 1st and 2nd level."""
 
     # Class identifier.
     _c_classid = 'CACHEARRAY'
 
 
-
-class LastRowArray(NotLoggedMixin, CArray, indexesextension.LastRowArray):
+class LastRowArray(indexesextension.LastRowArray, NotLoggedMixin, CArray):
     """Container for keeping sorted and indices values of last row of an
     index."""
 
@@ -41,8 +41,8 @@ class LastRowArray(NotLoggedMixin, CArray, indexesextension.LastRowArray):
     _c_classid = 'LASTROWARRAY'
 
 
-
-class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
+@six.python_2_unicode_compatible
+class IndexArray(indexesextension.IndexArray, NotLoggedMixin, EArray):
     """Represent the index (sorted or reverse index) dataset in HDF5 file.
 
     All NumPy typecodes are supported except for complex datatypes.
@@ -72,7 +72,6 @@ class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
 
     # Class identifier.
     _c_classid = 'INDEXARRAY'
-
 
     # Properties
     # ~~~~~~~~~~
@@ -173,7 +172,6 @@ class IndexArray(NotLoggedMixin, EArray, indexesextension.IndexArray):
             result2 = indexesextension._bisect_right(chunk, item2, chunksize)
             result2 += chunksize * nchunk2
         return (result1, result2)
-
 
     def __str__(self):
         "A compact representation of this class"

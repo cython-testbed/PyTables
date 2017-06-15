@@ -4,6 +4,7 @@ python:
   - 2.7
   - 3.4
   - 3.5
+  - 3.6
 
 sudo: false
 
@@ -23,10 +24,13 @@ install:
 
 script:
   - cd .. && python -m tables.tests.test_all
+  - pt2to3 -h
+  - ptrepack -h
+  - ptdump -h
+  - pttree -h
 
 notifications:
   webhooks:
     urls:
       - https://webhooks.gitter.im/e/58f8a9014ef02f6217ec
     on_success: change
-

@@ -15,8 +15,6 @@
 import sys
 
 cdef extern from *:
-  ctypedef char const_char 'const char'
-  #ctypedef long size_t
   ctypedef long uintptr_t
 
 # Standard C functions.
@@ -40,16 +38,16 @@ cdef extern from "numpy/arrayobject.h":
 # Structs and types from HDF5
 cdef extern from "hdf5.h" nogil:
 
-  ctypedef int hid_t  # In H5Ipublic.h
+  ctypedef long long hid_t  # In H5Ipublic.h
   ctypedef int hbool_t
   ctypedef int herr_t
   ctypedef int htri_t
   # hsize_t should be unsigned, but Windows platform does not support
   # such an unsigned long long type.
-  ctypedef long long hsize_t
+  ctypedef unsigned long long hsize_t
   ctypedef signed long long hssize_t
   ctypedef long long int64_t
-  ctypedef long long haddr_t
+  ctypedef unsigned long long haddr_t
   ctypedef haddr_t hobj_ref_t
 
   ctypedef struct hvl_t:
@@ -172,61 +170,58 @@ cdef extern from "hdf5.h" nogil:
     H5T_NCLASSES                # this must be last
 
   # Native types
-  cdef enum:
-    H5T_C_S1
-    H5T_NATIVE_B8
-    H5T_NATIVE_CHAR
-    H5T_NATIVE_SCHAR
-    H5T_NATIVE_UCHAR
-    H5T_NATIVE_SHORT
-    H5T_NATIVE_USHORT
-    H5T_NATIVE_INT
-    H5T_NATIVE_UINT
-    H5T_NATIVE_LONG
-    H5T_NATIVE_ULONG
-    H5T_NATIVE_LLONG
-    H5T_NATIVE_ULLONG
-    H5T_NATIVE_FLOAT
-    H5T_NATIVE_DOUBLE
-    H5T_NATIVE_LDOUBLE
+  hid_t H5T_C_S1
+  hid_t H5T_NATIVE_B8
+  hid_t H5T_NATIVE_CHAR
+  hid_t H5T_NATIVE_SCHAR
+  hid_t H5T_NATIVE_UCHAR
+  hid_t H5T_NATIVE_SHORT
+  hid_t H5T_NATIVE_USHORT
+  hid_t H5T_NATIVE_INT
+  hid_t H5T_NATIVE_UINT
+  hid_t H5T_NATIVE_LONG
+  hid_t H5T_NATIVE_ULONG
+  hid_t H5T_NATIVE_LLONG
+  hid_t H5T_NATIVE_ULLONG
+  hid_t H5T_NATIVE_FLOAT
+  hid_t H5T_NATIVE_DOUBLE
+  hid_t H5T_NATIVE_LDOUBLE
 
   # "Standard" types
-  cdef enum:
-    H5T_STD_I8LE
-    H5T_STD_I16LE
-    H5T_STD_I32LE
-    H5T_STD_I64LE
-    H5T_STD_U8LE
-    H5T_STD_U16LE
-    H5T_STD_U32LE
-    H5T_STD_U64LE
-    H5T_STD_B8LE
-    H5T_STD_B16LE
-    H5T_STD_B32LE
-    H5T_STD_B64LE
-    H5T_IEEE_F32LE
-    H5T_IEEE_F64LE
-    H5T_STD_I8BE
-    H5T_STD_I16BE
-    H5T_STD_I32BE
-    H5T_STD_I64BE
-    H5T_STD_U8BE
-    H5T_STD_U16BE
-    H5T_STD_U32BE
-    H5T_STD_U64BE
-    H5T_STD_B8BE
-    H5T_STD_B16BE
-    H5T_STD_B32BE
-    H5T_STD_B64BE
-    H5T_IEEE_F32BE
-    H5T_IEEE_F64BE
+  hid_t H5T_STD_I8LE
+  hid_t H5T_STD_I16LE
+  hid_t H5T_STD_I32LE
+  hid_t H5T_STD_I64LE
+  hid_t H5T_STD_U8LE
+  hid_t H5T_STD_U16LE
+  hid_t H5T_STD_U32LE
+  hid_t H5T_STD_U64LE
+  hid_t H5T_STD_B8LE
+  hid_t H5T_STD_B16LE
+  hid_t H5T_STD_B32LE
+  hid_t H5T_STD_B64LE
+  hid_t H5T_IEEE_F32LE
+  hid_t H5T_IEEE_F64LE
+  hid_t H5T_STD_I8BE
+  hid_t H5T_STD_I16BE
+  hid_t H5T_STD_I32BE
+  hid_t H5T_STD_I64BE
+  hid_t H5T_STD_U8BE
+  hid_t H5T_STD_U16BE
+  hid_t H5T_STD_U32BE
+  hid_t H5T_STD_U64BE
+  hid_t H5T_STD_B8BE
+  hid_t H5T_STD_B16BE
+  hid_t H5T_STD_B32BE
+  hid_t H5T_STD_B64BE
+  hid_t H5T_IEEE_F32BE
+  hid_t H5T_IEEE_F64BE
 
   # Types which are particular to UNIX (for Time types)
-  cdef enum:
-    H5T_UNIX_D32LE
-    H5T_UNIX_D64LE
-    H5T_UNIX_D32BE
-    H5T_UNIX_D64BE
+  hid_t H5T_UNIX_D32LE
+  hid_t H5T_UNIX_D64LE
+  hid_t H5T_UNIX_D32BE
+  hid_t H5T_UNIX_D64BE
 
   # The order to retrieve atomic native datatype
   cdef enum H5T_direction_t:
@@ -281,9 +276,9 @@ cdef extern from "hdf5.h" nogil:
     hid_t       maj_num     # major error ID
     hid_t       min_num     # minor error number
     unsigned    line        # line in file where error occurs
-    const_char  *func_name  # function in which error occurred
-    const_char  *file_name  # file in which error occurred
-    const_char  *desc       # optional supplied description
+    const char  *func_name  # function in which error occurred
+    const char  *file_name  # file in which error occurred
+    const char  *desc       # optional supplied description
 
   ctypedef herr_t (*H5E_walk_t)(unsigned n, H5E_error_t *err, void *data)
   ctypedef herr_t (*H5E_auto_t)(hid_t estack, void *data)
@@ -433,7 +428,7 @@ cdef extern from "hdf5.h" nogil:
   #                          size_t *block_size, size_t *cbuf_size)
   #herr_t H5Pset_fapl_direct(hid_t fapl_id, size_t alignment,
   #                          size_t block_size, size_t cbuf_size)
-  herr_t H5Pset_fapl_log(hid_t fapl_id, const_char *logfile,
+  herr_t H5Pset_fapl_log(hid_t fapl_id, const char *logfile,
                          unsigned long long flags, size_t buf_size)
   #herr_t H5Pset_fapl_windows(hid_t fapl_id)
   herr_t H5Pset_fapl_stdio(hid_t fapl_id)
@@ -446,7 +441,7 @@ cdef extern from "hdf5.h" nogil:
   herr_t H5Pset_fapl_family(hid_t fapl_id, hsize_t memb_size,
                             hid_t memb_fapl_id)
   #herr_t H5Pget_fapl_multi(hid_t fapl_id, H5FD_mem_t *memb_map,
-  #                         hid_t *memb_fapl, const_char **memb_name,
+  #                         hid_t *memb_fapl, const char **memb_name,
   #                         haddr_t *memb_addr, hbool_t *relax)
   herr_t H5Pset_fapl_multi(hid_t fapl_id, H5FD_mem_t *memb_map,
                            hid_t *memb_fapl, char **memb_name,
