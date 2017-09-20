@@ -16,7 +16,7 @@ addons:
     - liblzo2-dev
 
 before_install:
-  - pip install https://github.com/cython/cython/archive/3134ec551ae09b880d71999f16f035683b47a8dc.zip --install-option=--no-cython-compile
+  - pip install https://github.com/cython/cython/archive/0.27rc1.zip --install-option=--no-cython-compile
   - python setup.py sdist
 
 install:
