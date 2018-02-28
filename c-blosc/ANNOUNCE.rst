@@ -1,19 +1,19 @@
 ===============================================================
- Announcing C-Blosc 1.11.3
+ Announcing C-Blosc 1.14.0
  A blocking, shuffling and lossless compression library for C
 ===============================================================
 
 What is new?
 ============
 
-Fixed an important bug in bitshuffle filter for big endian machines.
-This prevented files written in bigendian machines to be read from
-little endian ones.  See issue https://github.com/Blosc/c-blosc/issues/181.
+The most important change is a new split mode that favors forward
+compatibility.  That means that, from now on, all the buffers created
+starting with blosc 1.14.0 will be forward compatible with any previous
+versions of the library --at least until 1.3.0, when support for
+multi-codec was introduced.
 
-Also, the internal Zstd codec has been updated to 1.1.3.
-
-Finally, the blocksize for compression level 8 has been made 2x larger.
-This should help specially Zstd codec to achieve better compression ratios.
+Also, a new policy about forward compatibility has been put in place.
+See blog entry at: http://blosc.org/posts/new-forward-compat-policy
 
 For more info, please see the release notes in:
 
@@ -29,7 +29,7 @@ the processor cache faster than the traditional, non-compressed,
 direct memory fetch approach via a memcpy() OS call.
 
 Blosc has internal support for different compressors like its internal
-BloscLZ, but also LZ4, LZ4HC, Snappy and Zlib.  This way these can
+BloscLZ, but also LZ4, LZ4HC, Snappy, Zlib and Zstd.  This way these can
 automatically leverage the multithreading and pre-filtering
 (shuffling) capabilities that comes with Blosc.
 
@@ -37,15 +37,11 @@ automatically leverage the multithreading and pre-filtering
 Download sources
 ================
 
-Please go to main web site:
-
-http://www.blosc.org/
-
-and proceed from there.  The github repository is over here:
+The github repository is over here:
 
 https://github.com/Blosc
 
-Blosc is distributed using the MIT license, see LICENSES/BLOSC.txt for
+Blosc is distributed using the BSD license, see LICENSES/BLOSC.txt for
 details.
 
 
