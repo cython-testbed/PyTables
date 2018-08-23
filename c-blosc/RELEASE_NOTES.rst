@@ -7,6 +7,44 @@
 :URL: http://www.blosc.org
 
 
+Changes from 1.14.2 to 1.14.3
+=============================
+
+- Use win32/pthread.c on all Windows builds, even those with GNU compilers.
+  Rational: although MinGW provides a more full-featured pthreads replacement,
+  it doesn't seem to accomplish anything here since the functionality in
+  win32/pthread.c is sufficient for Blosc. Furthermore, using the MinGW
+  pthreads adds an additional library dependency to libblosc that is
+  annoying for binary distribution. For example, it got in the way of
+  distributing cross-compiled Windows binaries for use with Julia, since they
+  want the resulting libblosc.dll to be usable on any Windows machine even
+  where MinGW is not installed.  See PR #224.  Thanks to Steven G. Johnson.
+
+- Zstd internal sources have been updated to 1.3.4.
+
+
+Changes from 1.14.1 to 1.14.2
+=============================
+
+- Reverted the $Configuration var in CMake configuration for Windows so
+  as to restore the compatibility with MS VisualStudio compilers.
+
+
+Changes from 1.14.0 to 1.14.1
+=============================
+
+- Fixed a bug that caused C-Blosc to crash on platforms requiring strict
+  alignment (as in some kinds of ARM CPUs).  Fixes #223.  Thanks to Elvis
+  Stansvik and Michael Hudson-Doyle for their help.
+
+- Fixed a piece of code that was not C89 compliant.  C89 compliance is
+  needed mainly by MS VS2008 which is still used for creating Python 2
+  extensions.
+
+- Remove the (spurious) $Configuration var in cmake config for Windows.
+  Thanks to Francis Brissette for pointing this out.
+
+
 Changes from 1.13.7 to 1.14.0
 =============================
 
@@ -27,7 +65,8 @@ Changes from 1.13.7 to 1.14.0
 
   Caveat Emptor: Note that Blosc versions from 1.11.0 to 1.14.0 *might*
   generate buffers that cannot be read with versions < 1.11.0, so if
-  forward compatibility is important to you, an upgrade to 1.14.0 is recommended.
+  forward compatibility is important to you, an upgrade to 1.14.0 is
+  recommended.
 
 - All warnings during cmake build stage are enabled by default now.
   PR #218.  Thanks to kalvdans.
@@ -37,7 +76,7 @@ Changes from 1.13.7 to 1.14.0
 
 - The BLOSC_PRINT_SHUFFLE_ACCEL environment variable is honored now.
   This is useful for determining *at runtime* whether the different SIMD
-  capabilities (only for Intel processors) are available to Blosc to get
+  capabilities (only for x86 kind processors) are available to Blosc to get
   better performance during shuffle/bitshuffle operation.  As an example,
   here it is the normal output for the simple.c example::
 
