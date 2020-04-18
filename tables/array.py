@@ -11,7 +11,6 @@
 ########################################################################
 
 """Here is defined the Array class."""
-from __future__ import absolute_import
 
 import operator
 import sys
@@ -24,9 +23,6 @@ from .leaf import Leaf
 from .utils import (is_idx, convert_to_np_atom2, SizeType, lazyattr,
                     byteorders, quantize)
 
-from six.moves import range
-from six.moves import zip
-import six
 
 
 # default version for ARRAY objects
@@ -38,7 +34,7 @@ import six
 obversion = "2.4"    # Numeric and numarray flavors are gone.
 
 
-class Array(hdf5extension.Array, Leaf, six.Iterator):
+class Array(hdf5extension.Array, Leaf):
     """This class represents homogeneous datasets in an HDF5 file.
 
     This class provides methods to write or read data to or from array objects
@@ -801,7 +797,7 @@ class Array(hdf5extension.Array, Leaf, six.Iterator):
             k[idx] = neworder.argsort()
             # Apparently, a copy is not needed here, but doing it
             # for symmetry with the `_write_selection()` method.
-            nparr = nparr[k].copy()
+            nparr = nparr[tuple(k)].copy()
         return nparr
 
     def _write_slice(self, startl, stopl, stepl, shape, nparr):
@@ -833,7 +829,7 @@ class Array(hdf5extension.Array, Leaf, six.Iterator):
             k[idx] = neworder
             # For a reason a don't understand well, we need a copy of
             # the reordered array
-            nparr = nparr[k].copy()
+            nparr = nparr[tuple(k)].copy()
         self._g_write_selection(selection, nparr)
 
     def _read(self, start, stop, step, out=None):

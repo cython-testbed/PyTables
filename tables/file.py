@@ -20,8 +20,6 @@ nodes.
 
 """
 
-from __future__ import print_function
-from __future__ import absolute_import
 import os
 import sys
 import time
@@ -61,9 +59,6 @@ from .atom import Atom
 
 from .link import SoftLink, ExternalLink
 
-import six
-from six.moves import map
-from six.moves import range
 
 
 
@@ -576,7 +571,6 @@ class NodeManager(object):
                 node._f_close()
 
 
-@six.python_2_unicode_compatible
 class File(hdf5extension.File, object):
     """The in-memory representation of a PyTables file.
 
@@ -759,14 +753,14 @@ class File(hdf5extension.File, object):
                              "'r', 'r+', 'a' and 'w'" % mode)
 
         # Get all the parameters in parameter file(s)
-        params = dict([(k, v) for k, v in six.iteritems(parameters.__dict__)
+        params = dict([(k, v) for k, v in parameters.__dict__.items()
                        if k.isupper() and not k.startswith('_')])
         # Update them with possible keyword arguments
         if [k for k in kwargs if k.isupper()]:
             warnings.warn("The use of uppercase keyword parameters is "
                           "deprecated", DeprecationWarning)
 
-        kwargs = dict([(k.upper(), v) for k, v in six.iteritems(kwargs)])
+        kwargs = dict([(k.upper(), v) for k, v in kwargs.items()])
         params.update(kwargs)
 
         # If MAX_ * _THREADS is not set yet, set it to the number of cores
@@ -864,10 +858,7 @@ class File(hdf5extension.File, object):
                 self._isPTFile = False
             elif not isinstance(self.format_version, str):
                 # system attributes should always be str
-                if sys.version_info[0] < 3:
-                    self.format_version = self.format_version.encode()
-                else:
-                    self.format_version = self.format_version.decode('utf-8')
+                self.format_version = self.format_version.decode('utf-8')
 
         # Create new attributes for the root Group instance and
         # create the object tree
@@ -1046,9 +1037,9 @@ class File(hdf5extension.File, object):
             if not isinstance(obj, numpy.ndarray):
                 raise TypeError('invalid obj parameter %r' % obj)
 
-            descr, _ = descr_from_dtype(obj.dtype)
+            descr, _ = descr_from_dtype(obj.dtype, ptparams=self.params)
             if (description is not None and
-                    dtype_from_descr(description) != obj.dtype):
+                    dtype_from_descr(description, ptparams=self.params) != obj.dtype):
                 raise TypeError('the desctiption parameter is not consistent '
                                 'with the data type of the obj parameter')
             elif description is None:
@@ -1642,7 +1633,7 @@ class File(hdf5extension.File, object):
             basepath = where._v_pathname
             nodepath = join_path(basepath, name or '') or '/'
             node = where._v_file._get_node(nodepath)
-        elif isinstance(where, (six.string_types, numpy.str_)):
+        elif isinstance(where, (str, numpy.str_)):
             if not where.startswith('/'):
                 raise NameError("``where`` must start with a slash ('/')")
 
@@ -2462,7 +2453,7 @@ class File(hdf5extension.File, object):
             markid = mark
         elif isinstance(mark, str):
             if mark not in self._markers:
-                lmarkers = sorted(six.iterkeys(self._markers))
+                lmarkers = sorted(self._markers.keys())
                 raise UndoRedoError("The mark that you have specified has not "
                                     "been found in the internal marker list: "
                                     "%r" % lmarkers)
@@ -2849,7 +2840,7 @@ class File(hdf5extension.File, object):
 
         # Update alive and dead descendents.
         for cache in [self._node_manager.cache, self._node_manager.registry]:
-            for nodepath in cache:
+            for nodepath in list(cache):
                 if nodepath.startswith(oldprefix) and nodepath != oldprefix:
                     nodesuffix = nodepath[oldprefix_len:]
                     newnodepath = join_path(newpath, nodesuffix)

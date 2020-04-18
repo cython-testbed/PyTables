@@ -49,14 +49,14 @@ Prerequisites
 
 First, make sure that you have
 
-* Python_ >= 2.7 including Python 3.x
+* Python_ >= 3.4 (PyTables-3.5 was the last release with Python 2.7 support)
 * HDF5_ >= 1.8.4 (>=1.8.15 is strongly recommended)
-* NumPy_ >= 1.8.1
-* Numexpr_ >= 2.5.2
+* NumPy_ >= 1.9.3
+* Numexpr_ >= 2.6.2
 * Cython_ >= 0.21
 * c-blosc_ >= 1.4.1 (sources are bundled with PyTables sources but the user can
   use an external version of sources using the :envvar:`BLOSC_DIR` environment
-  variable or the :option:`--blosc` flag of the :file:`setup.py`)
+  variable or the `--blosc` flag of the :file:`setup.py`)
 
 installed (for testing purposes, we are using HDF5_ 1.8.15, NumPy_ 1.10.2
 and Numexpr_ 2.5.2 currently). If you don't, fetch and install them before
@@ -68,8 +68,6 @@ proceeding.
 .. _Numexpr: http://code.google.com/p/numexpr
 .. _Cython: http://www.cython.org
 .. _c-blosc: http://blosc.org
-.. _argparse: http://code.google.com/p/argparse
-.. _unittest2: http://pypi.python.org/pypi/unittest2
 
 Compile and install these packages (but see :ref:`prerequisitesBinInst` for
 instructions on how to install pre-compiled binaries if you are not willing
@@ -128,11 +126,11 @@ worry too much ;)
 
     To suppress the use of *pkg-config*::
 
-      $ python setup.py build --use-pkgconfig=FALSE
+      $ python3 setup.py build --use-pkgconfig=FALSE
 
     or use the :envvar:`USE-PKGCONFIG` environment variable::
 
-      $ env USE_PKGCONFIG=FALSE python setup.py build
+      $ env USE_PKGCONFIG=FALSE python3 setup.py build
 
 **Windows**
 
@@ -183,7 +181,7 @@ worry too much ;)
     the hdf5 package::
 
         conda install hdf5
-        python setup.py install
+        python3 setup.py install
 
     It is still possible to override package locations using the
     :envvar:`HDF5_DIR`, :envvar:`LZO_DIR`, :envvar:`BZIP2_DIR` or
@@ -192,7 +190,7 @@ worry too much ;)
     When inside a conda environment *pkg-config* will not work. To disable
     using the conda enviroment and fall back to *pkg-config* use `--no-conda`::
 
-          python setup.py install --no-conda
+          python3 setup.py install --no-conda
 
     When the `--use-pkgconfig` flag is used, `--no-conda` is assumed.
 
@@ -227,12 +225,22 @@ you can proceed with the PyTables package itself.
 #. Run this command from the main PyTables distribution directory, including
    any extra command line arguments as discussed above::
 
-      $ python setup.py build
+      $ python3 setup.py build
 
    If the HDF5 installation is in a custom path, e.g. $HOME/hdf5-1.8.15pre7,
    one of the following commands can be used::
 
-      $ python setup.py build --hdf5=$HOME/hdf5-1.8.15pre7
+      $ python3 setup.py build --hdf5=$HOME/hdf5-1.8.15pre7
+
+   .. note::
+
+       AVX2 support is detected automatically for your machine and, if found,
+       it is enabled by default.  In some situations you may want to disable
+       AVX2 explicitly (maybe your binaries have to be exported and run on
+       machines that do not have AVX2 support).  In that case, define the
+       DISABLE_AVX2 environment variable::
+
+          $ DISABLE_AVX2=True python3 setup.py build  # for bash and its variants
 
 #. To run the test suite, execute any of these commands.
 
@@ -240,12 +248,12 @@ you can proceed with the PyTables package itself.
       In the sh shell and its variants::
 
         $ cd build/lib.linux-x86_64-3.3
-        $ env PYTHONPATH=. python tables/tests/test_all.py
+        $ env PYTHONPATH=. python3 tables/tests/test_all.py
 
       or, if you prefer::
 
         $ cd build/lib.linux-x86_64-3.3
-        $ env PYTHONPATH=. python -c "import tables; tables.test()"
+        $ env PYTHONPATH=. python3 -c "import tables; tables.test()"
 
       .. note::
 
@@ -255,7 +263,7 @@ you can proceed with the PyTables package itself.
           some path before existing ones, then the safest syntax to use is
           the following::
 
-            $ env PYTHONPATH=.${PYTHONPATH:+:$PYTHONPATH} python tables/tests/test_all.py
+            $ env PYTHONPATH=.${PYTHONPATH:+:$PYTHONPATH} python3 tables/tests/test_all.py
 
           Please refer to your :program:`sh` documentation for details.
 
@@ -265,13 +273,13 @@ you can proceed with the PyTables package itself.
 
         > cd build\\lib.linux-x86_64-2.7
         > set PYTHONPATH=.;%PYTHONPATH%
-        > python tables\\tests\\test_all.py
+        > python3 tables\\tests\\test_all.py
 
       or::
 
         > cd build\\lib.linux-x86_64-2.7
         > set PYTHONPATH=.;%PYTHONPATH%
-        > python -c "import tables; tables.test()"
+        > python3 -c "import tables; tables.test()"
 
    Both commands do the same thing, but the latter still works on an already
    installed PyTables (so, there is no need to set the :envvar:`PYTHONPATH`
@@ -279,30 +287,30 @@ you can proceed with the PyTables package itself.
    However, before installation, the former is recommended because it is
    more flexible, as you can see below.
    If you would like to see verbose output from the tests simply add the
-   :option:`-v` flag and/or the word verbose to the first of the command lines
+   `-v` flag and/or the word verbose to the first of the command lines
    above. You can also run only the tests in a particular test module.
    For example, to execute just the test_types test suite, you only have to
    specify it::
 
       # change to backslashes for win
-      $ python tables/tests/test_types.py -v
+      $ python3 tables/tests/test_types.py -v
 
    You have other options to pass to the :file:`test_all.py` driver::
 
       # change to backslashes for win
-      $ python tables/tests/test_all.py --heavy
+      $ python3 tables/tests/test_all.py --heavy
 
    The command above runs every test in the test unit. Beware, it can take a
    lot of time, CPU and memory resources to complete::
 
       # change to backslashes for win
-      $ python tables/tests/test_all.py --print-versions
+      $ python3 tables/tests/test_all.py --print-versions
 
    The command above shows the versions for all the packages that PyTables
    relies on. Please be sure to include this when reporting bugs::
 
       # only under Linux 2.6.x
-      $ python tables/tests/test_all.py --show-memory
+      $ python3 tables/tests/test_all.py --show-memory
 
    The command above prints out the evolution of the memory consumption after
    each test module completion. It's useful for locating memory leaks in
@@ -310,10 +318,10 @@ you can proceed with the PyTables package itself.
    And last, but not least, in case a test fails, please run the failing test
    module again and enable the verbose output::
 
-      $ python tables/tests/test_<module>.py -v verbose
+      $ python3 tables/tests/test_<module>.py -v verbose
 
    and, very important, obtain your PyTables version information by using the
-   :option:`--print-versions` flag (see above) and send back both outputs to
+   `--print-versions` flag (see above) and send back both outputs to
    developers so that we may continue improving PyTables.
    If you run into problems because Python can not load the HDF5 library or
    other shared libraries.
@@ -336,31 +344,31 @@ you can proceed with the PyTables package itself.
    sufficient permissions to write to the directories where the PyTables files
    will be installed)::
 
-      $ python setup.py install
+      $ python3 setup.py install
 
    Again if one needs to point to libraries installed in custom paths, then
    specific setup.py options can be used::
 
-      $ python setup.py install --hdf5=/hdf5/custom/path
+      $ python3 setup.py install --hdf5=/hdf5/custom/path
 
    or::
 
-      $ env HDF5_DIR=/hdf5/custom/path python setup.py install
+      $ env HDF5_DIR=/hdf5/custom/path python3 setup.py install
 
    Of course, you will need super-user privileges if you want to install
    PyTables on a system-protected area. You can select, though, a different
-   place to install the package using the :option:`--prefix` flag::
+   place to install the package using the `--prefix` flag::
 
-      $ python setup.py install --prefix="/home/myuser/mystuff"
+      $ python3 setup.py install --prefix="/home/myuser/mystuff"
 
-   Have in mind, however, that if you use the :option:`--prefix` flag to
+   Have in mind, however, that if you use the `--prefix` flag to
    install in a non-standard place, you should properly setup your
    :envvar:`PYTHONPATH` environment variable, so that the Python interpreter
    would be able to find your new PyTables installation.
    You have more installation options available in the Distutils package.
    Issue a::
 
-      $ python setup.py install --help
+      $ python3 setup.py install --help
 
    for more information on that subject.
 
@@ -378,13 +386,13 @@ dependencies listed in the `Prerequisites`_ section are correctly installed.
 
 The simplest way to install PyTables using :program:`pip` is the following::
 
-  $ pip install tables
+  $ python3 -m pip install tables
 
 The following example shows how to install the latest stable version of
 PyTables in the user folder when a older version of the package is already
 installed at system level::
 
-  $ pip install --user --upgrade tables
+  $ python3 -m pip install --user --upgrade tables
 
 The `--user` option tells to the :program:`pip` tool to install the package in
 the user folder (``$HOME/.local`` on GNU/Linux and Unix systems), while the
@@ -394,32 +402,32 @@ older version of the package is already installed.
 Additional options for the setup.py script can be specified using them
 `--install-option`::
 
-  $ pip install --install-option='--hdf5=/custom/path/to/hdf5' tables
+  $ python3 -m pip install --install-option='--hdf5=/custom/path/to/hdf5' tables
 
 or::
 
-  $ env HDF5_DIR=/custom/path/to/hdf5 pip install tables
+  $ env HDF5_DIR=/custom/path/to/hdf5 python3 -m pip install tables
 
 The :program:`pip` tool can also be used to install packages from a source
 tar-ball::
 
-  $ pip install tables-3.0.0.tar.gz
+  $ python3 -m pip install tables-3.0.0.tar.gz
 
 To install the development version of PyTables from the *develop* branch of
 the main :program:`git` :ref:`[GIT] <GIT>` repository the command is the
 following::
 
-  $ pip install git+https://github.com/PyTables/PyTables.git@develop#egg=tables
+  $ python3 -m pip install git+https://github.com/PyTables/PyTables.git@develop#egg=tables
 
 A similar command can be used to install a specific tagged fersion::
 
-  $ pip install git+https://github.com/PyTables/PyTables.git@v.2.4.0#egg=tables
+  $ python3 -m pip install git+https://github.com/PyTables/PyTables.git@v.2.4.0#egg=tables
 
 Finally, PyTables developers provide a :file:`requirements.txt` file that
 can be used by :program:`pip` to install the PyTables dependencies::
 
   $ wget https://raw.github.com/PyTables/PyTables/develop/requirements.txt
-  $ pip install -r requirements.txt
+  $ python3 -m pip install -r requirements.txt
 
 Of course the :file:`requirements.txt` file can be used to install only
 python packages.  Other dependencies like the HDF5 library of compression
@@ -443,7 +451,7 @@ libraries have to be installed by the user.
    or::
 
      $ env CPPFLAGS=-I/usr/include/hdf5/serial \
-     LDFLAGS=-L/usr/lib/x86_64-linux-gnu/hdf5/serial pip install tables
+     LDFLAGS=-L/usr/lib/x86_64-linux-gnu/hdf5/serial python3 -m pip install tables
 
 .. _Debian: https://www.debian.org
 .. _Ubuntu: http://www.ubuntu.com
@@ -465,7 +473,7 @@ compile PyTables itself on Windows.
 Windows prerequisites
 ~~~~~~~~~~~~~~~~~~~~~
 
-First, make sure that you have Python 2.7, NumPy 1.8.0 and Numexpr 2.5.2 or
+First, make sure that you have Python 3, NumPy 1.8.0 and Numexpr 2.5.2 or
 higher installed.
 
 To enable compression with the optional LZO library (see the
@@ -492,7 +500,7 @@ PyTables package installation
 On PyPI wheels for 32 and 64-bit versions of Windows and are usually provided. They
 are automatically found and installed using pip::
 
-    $ pip install tables
+    $ python3 -m pip install tables
 
 If a matching wheel cannot be found for your installation, third party built wheels
 can be found e.g. at the `Unofficial Windows Binaries for Python Extension Packages
@@ -501,7 +509,7 @@ matching the version of python and either the 32 or 64-bit version and install
 using pip::
 
     # python 3.5 64-bit:
-    $ pip install tables-3.3-cp35-cp35m-win_amd64.whl
+    $ python3 -m pip install tables-3.3-cp35-cp35m-win_amd64.whl
 
 You can (and *you should*) test your installation by running the next
 commands::

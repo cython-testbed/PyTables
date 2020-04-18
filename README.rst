@@ -6,15 +6,11 @@
    :alt: Join the chat at https://gitter.im/PyTables/PyTables
    :target: https://gitter.im/PyTables/PyTables
 
-.. image:: https://travis-ci.org/PyTables/PyTables.svg?branch=develop
+.. image:: https://travis-ci.org/PyTables/PyTables.svg?branch=master
    :target: https://travis-ci.org/PyTables/PyTables
 
-.. image:: https://ci.appveyor.com/api/projects/status/github/PyTables/PyTables?branch=develop&svg=true
+.. image:: https://ci.appveyor.com/api/projects/status/github/PyTables/PyTables?branch=master&svg=true
    :target: https://ci.appveyor.com/project/PyTablesCI/pytables
-
-.. image:: https://codeclimate.com/github/PyTables/PyTables/badges/gpa.svg
-   :target: https://codeclimate.com/github/PyTables/PyTables
-   :alt: Code Climate
 
 :URL: http://www.pytables.org/
 
@@ -109,10 +105,9 @@ Installation
 
    On OSX you can install HDF5 using `Homebrew <http://brew.sh>`_::
 
-       $ brew tap homebrew/science
        $ brew install hdf5
 
-   On ubuntu::
+   On debian bases distributions::
 
        $ sudo apt-get install libhdf5-serial-dev
 
@@ -133,11 +128,11 @@ Installation
 
 4. Install!::
 
-       $ pip install tables
+       $ python3 -m pip install tables
 
 5. To run the test suite run::
 
-       $ python -m tables.tests.test_all
+       $ python3 -m tables.tests.test_all
 
    If there is some test that does not pass, please send the
    complete output for tests back to us.

@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-from __future__ import absolute_import
 import sys
 
 import numpy as np
@@ -16,7 +14,6 @@ from tables.tests.common import allequal
 from tables.tests.common import unittest
 from tables.tests.common import PyTablesTestCase as TestCase
 from tables.description import descr_from_dtype
-from six.moves import range
 
 
 # It is important that columns are ordered according to their names
@@ -64,7 +61,7 @@ class RecordDT(tables.IsDescription):
     var4 = Col.from_dtype(np.dtype("2f8"), dflt=3.1)
     var5 = Col.from_dtype(np.dtype("f4"), dflt=4.2)
     var6 = Col.from_dtype(np.dtype("()u2"), dflt=5)
-    var7 = Col.from_dtype(np.dtype("1S1"), dflt=b"e")   # no shape
+    var7 = Col.from_dtype(np.dtype("S1"), dflt=b"e")   # no shape
 
 
 class BasicTestCase(common.TempFileMixin, TestCase):
@@ -499,6 +496,17 @@ class RecArrayThreeWriteTestCase(BasicTestCase):
         formats="(2,)a4,(2,2)a4,(2,)i4,(2,2)i4,i2,2f8,4f4,i2,a1",
         names='var0,var1,var1_,var2,var3,var4,var5,var6,var7',
         shape=1)
+
+
+class RecArrayAlignedWriteTestCase(BasicTestCase):
+    title = "RecArrayThreeWrite"
+    expectedrows = 100
+    recarrayinit = 1
+    recordtemplate = np.rec.array(
+        None,
+        formats="(2,)a4,(2,2)a4,(2,)i4,(2,2)i4,i2,2f8,4f4,i2,a1",
+        names='var0,var1,var1_,var2,var3,var4,var5,var6,var7',
+        shape=1, aligned=True)
 
 
 @unittest.skipIf(not common.blosc_avail,
@@ -1903,7 +1911,7 @@ class UpdateRowTestCase(common.TempFileMixin, TestCase):
             print("Original table-->", repr(r2))
             print("Should look like-->", repr(r1))
         self.assertEqual(r1.tostring(), r2.tostring())
-        self.assertTrue(table.nrows, 4)
+        self.assertEqual(table.nrows, 4)
 
     def test05(self):
         """Checking modifying one column (single element, Row.update)"""
@@ -2237,6 +2245,7 @@ def suite():
         theSuite.addTest(unittest.makeSuite(RecArrayOneWriteTestCase))
         theSuite.addTest(unittest.makeSuite(RecArrayTwoWriteTestCase))
         theSuite.addTest(unittest.makeSuite(RecArrayThreeWriteTestCase))
+        theSuite.addTest(unittest.makeSuite(RecArrayAlignedWriteTestCase))
         theSuite.addTest(unittest.makeSuite(CompressZLIBTablesTestCase))
         theSuite.addTest(unittest.makeSuite(CompressTwoTablesTestCase))
         theSuite.addTest(unittest.makeSuite(IterRangeTestCase))

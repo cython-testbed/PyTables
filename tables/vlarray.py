@@ -11,7 +11,6 @@
 ########################################################################
 
 """Here is defined the VLArray class."""
-from __future__ import absolute_import
 
 import operator
 import sys
@@ -25,9 +24,6 @@ from .utils import (
     convert_to_np_atom, convert_to_np_atom2, idx2long, correct_byteorder,
     SizeType, is_idx, lazyattr)
 
-from six.moves import range
-from six.moves import zip
-import six
 
 # default version for VLARRAY objects
 # obversion = "1.0"    # initial version
@@ -38,7 +34,7 @@ import six
 obversion = "1.4"    # Numeric and numarray flavors are gone.
 
 
-class VLArray(hdf5extension.VLArray, Leaf, six.Iterator):
+class VLArray(hdf5extension.VLArray, Leaf):
     """This class represents variable length (ragged) arrays in an HDF5 file.
 
     Instances of this class represent array objects in the object tree
@@ -73,10 +69,6 @@ class VLArray(hdf5extension.VLArray, Leaf, six.Iterator):
     ----------
     parentnode
         The parent :class:`Group` object.
-
-        .. versionchanged:: 3.0
-           Renamed from *parentNode* to *parentnode*.
-
     name : str
         The name of this node in its parent group.
     atom
@@ -117,6 +109,10 @@ class VLArray(hdf5extension.VLArray, Leaf, six.Iterator):
         change time) is implemented.
 
         .. versionadded:: 3.4.3
+
+
+    .. versionchanged:: 3.0
+       *parentNode* renamed into *parentnode*.
 
     .. versionchanged:: 3.0
        The *expectedsizeinMB* parameter has been replaced by *expectedrows*.

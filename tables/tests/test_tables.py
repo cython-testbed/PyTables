@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-from __future__ import absolute_import
 import os
 import sys
 import tempfile
 from itertools import groupby
+import struct
+import platform
 
 import numpy as np
 from numpy import rec as records
@@ -22,10 +22,15 @@ from tables.tests.common import allequal, areArraysEqual
 from tables.tests.common import unittest, hdf5_version, blosc_version
 from tables.tests.common import PyTablesTestCase as TestCase
 from tables.description import descr_from_dtype
-import six
-from six.moves import range
-from six.moves import zip
 
+
+# To know whether the interpreter is 32 or 64 bit
+def is_python_64bit():
+    return struct.calcsize("P") == 8
+
+# To know whether the os platform is 32 or 64 bit
+def is_os_64bit():
+    return platform.machine().endswith('64')
 
 
 # Test Record class
@@ -1566,12 +1571,6 @@ class DictWriteTestCase(BasicTestCase):
     step = 3
 
 
-@unittest.skipIf(sys.version_info >= (3,), 'requires Python 2')
-class DictWriteTestCase2(DictWriteTestCase):
-    record = RecordDescriptionDict.copy()
-    record[six.text_type('var1')] = record.pop('var1')
-
-
 # Pure NumPy dtype
 class NumPyDTWriteTestCase(BasicTestCase):
     title = "NumPyDTWriteTestCase"
@@ -1675,6 +1674,33 @@ class RecArrayThreeWriteTestCase(BasicTestCase):
 
     recordtemplate = records.array(None, shape=1, formats=','.join(formats),
                                    names=names)
+
+
+class RecArrayAlignedWriteTestCase(BasicTestCase):
+    title = "RecArrayThreeWrite"
+    expectedrows = 100
+    recarrayinit = 1
+    formats = "a4,i4,i2,2f8,f4,i2,a1,b1,c8,c16".split(',')
+    names = 'var1,var2,var3,var4,var5,var6,var7,var8,var9,var10'.split(',')
+
+    if hasattr(tables, 'Float16Col'):
+        formats.append('f2')
+        names.append('var11')
+    if hasattr(tables, 'Float96Col'):
+        formats.append('f12')
+        names.append('var12')
+    if hasattr(tables, 'Float128Col'):
+        formats.append('f16')
+        names.append('var13')
+    if hasattr(tables, 'Complex192Col'):
+        formats.append('c24')
+        names.append('var14')
+    if hasattr(tables, 'Complex256Col'):
+        formats.append('c32')
+        names.append('var15')
+
+    recordtemplate = records.array(None, shape=1, formats=','.join(formats),
+                                   names=names, aligned=True)
 
 
 @unittest.skipIf(not common.blosc_avail,
@@ -1890,7 +1916,7 @@ class SizeOnDiskInMemoryPropertyTestCase(common.TempFileMixin, TestCase):
         self.assertTrue(
             abs(self.table.size_on_disk - file_size) <= self.hdf_overhead)
         self.assertEqual(self.table.size_in_memory, 10 * 1000 * 10 * 4)
-        self.assertTrue(self.table.size_on_disk < self.table.size_in_memory)
+        self.assertLess(self.table.size_on_disk, self.table.size_in_memory)
 
 
 class NonNestedTableReadTestCase(common.TempFileMixin, TestCase):
@@ -1934,7 +1960,7 @@ class NonNestedTableReadTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(out=output)
         except TypeError as exc:
-            self.assertTrue("Optional 'out' argument may only be" in str(exc))
+            self.assertIn("Optional 'out' argument may only be", str(exc))
 
     def test_read_all_out_arg(self):
         output = np.empty(self.shape, self.dtype)
@@ -2002,7 +2028,7 @@ class NonNestedTableReadTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(out=output)
         except ValueError as exc:
-            self.assertTrue('output array size invalid, got' in str(exc))
+            self.assertIn('output array size invalid, got', str(exc))
 
     def test_specified_field_buffer_too_small(self):
         output = np.empty((99, ), 'i4')
@@ -2011,7 +2037,7 @@ class NonNestedTableReadTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(field='f5', out=output)
         except ValueError as exc:
-            self.assertTrue('output array size invalid, got' in str(exc))
+            self.assertIn('output array size invalid, got', str(exc))
 
     def test_all_fields_buffer_too_large(self):
         output = np.empty((101, ), self.dtype)
@@ -2019,7 +2045,7 @@ class NonNestedTableReadTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(out=output)
         except ValueError as exc:
-            self.assertTrue('output array size invalid, got' in str(exc))
+            self.assertIn('output array size invalid, got', str(exc))
 
 
 class TableReadByteorderTestCase(common.TempFileMixin, TestCase):
@@ -2084,7 +2110,7 @@ class TableReadByteorderTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(out=output)
         except ValueError as exc:
-            self.assertTrue("array must be in system's byteorder" in str(exc))
+            self.assertIn("array must be in system's byteorder", str(exc))
 
     def test_table_other_byteorder_out_argument_other_byteorder(self):
         self.create_table(self.other_byteorder)
@@ -2095,7 +2121,7 @@ class TableReadByteorderTestCase(common.TempFileMixin, TestCase):
         try:
             self.table.read(out=output)
         except ValueError as exc:
-            self.assertTrue("array must be in system's byteorder" in str(exc))
+            self.assertIn("array must be in system's byteorder", str(exc))
 
 
 class BasicRangeTestCase(common.TempFileMixin, TestCase):
@@ -4482,10 +4508,10 @@ class CopyTestCase(common.TempFileMixin, TestCase):
 
         cinst1, cinst2 = table1.colinstances, table2.colinstances
         self.assertEqual(len(cinst1), len(cinst2))
-        for (cpathname, col1) in six.iteritems(cinst1):
+        for (cpathname, col1) in cinst1.items():
             self.assertTrue(cpathname in cinst2)
             col2 = cinst2[cpathname]
-            self.assertTrue(isinstance(col1, type(col2)))
+            self.assertIsInstance(col1, type(col2))
             if isinstance(col1, Column):
                 self.assertEqual(col1.name, col2.name)
                 self.assertEqual(col1.pathname, col2.pathname)
@@ -4503,8 +4529,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
             print("Running %s.test01_copy..." % self.__class__.__name__)
 
         # Create a recarray
-        r = records.array([(456, b'dbe', 1.2), (
-                          2, b'de', 1.3)], names='col1,col2,col3')
+        r = records.array([(456, b'dbe', 1.2), (2, b'de', 1.3)],
+                          names='col1,col2,col3', formats=('i4,S3,f8'),
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4551,6 +4578,15 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            self.assertEqual(table1.description._v_offsets, [0, 4, 8])
+            self.assertEqual(table1.description._v_itemsize, 16)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 4, 7])
+            self.assertEqual(table1.description._v_itemsize, 15)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # This could be not the same when re-opening the file
         # self.assertEqual(table1.description._v_ColObjects,
@@ -4570,8 +4606,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
             print("Running %s.test02_copy..." % self.__class__.__name__)
 
         # Create a recarray
-        r = records.array([(456, b'dbe', 1.2), (
-                          2, b'de', 1.3)], names='col1,col2,col3')
+        r = records.array([(b'dbe', 456, 1.2), (b'de', 2, 1.3)],
+                          names='col1,col2,col3', formats="S3,i4,f8",
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4615,6 +4652,15 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            self.assertEqual(table1.description._v_offsets, [0, 4, 8])
+            self.assertEqual(table1.description._v_itemsize, 16)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 3, 7])
+            self.assertEqual(table1.description._v_itemsize, 15)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # Leaf attributes
         self.assertEqual(table1.title, table2.title)
@@ -4636,7 +4682,8 @@ class CopyTestCase(common.TempFileMixin, TestCase):
 #         r=records.array(b'aaaabbbbccccddddeeeeffffgggg'*20000,
 #                         formats='2i2,i4, (2,3)u2, (1,)f4, f8',shape=700)
         r = records.array(b'aaaabbbbccccddddeeeeffffgggg' * 200,
-                          formats='2i2,i4, (2,3)u2, (1,)f4, f8', shape=7)
+                          formats='2i2,i4, (2,3)u2, (1,)f4, f8', shape=7,
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4680,6 +4727,15 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            self.assertEqual(table1.description._v_offsets, [0, 4, 8, 20, 24])
+            self.assertEqual(table1.description._v_itemsize, 32)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 4, 8, 20, 24])
+            self.assertEqual(table1.description._v_itemsize, 32)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # Leaf attributes
         self.assertEqual("title table2", table2.title)
@@ -4696,8 +4752,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
             print("Running %s.test04_copy..." % self.__class__.__name__)
 
         # Create a recarray
-        r = records.array([(456, b'dbe', 1.2), (
-                          2, b'de', 1.3)], names='col1,col2,col3')
+        r = records.array([(1.2, b'dbe', 456), (1.3, b'de', 2)],
+                          names='col1,col2,col3', formats="f8,S3,i4",
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4742,6 +4799,15 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            self.assertEqual(table1.description._v_offsets, [0, 8, 12])
+            self.assertEqual(table1.description._v_itemsize, 16)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 8, 11])
+            self.assertEqual(table1.description._v_itemsize, 15)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # Leaf attributes
         self.assertEqual(table1.title, table2.title)
@@ -4757,8 +4823,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
             print("Running %s.test05_copy..." % self.__class__.__name__)
 
         # Create a recarray
-        r = records.array([(456, b'dbe', 1.2), (
-                          2, b'de', 1.3)], names='col1,col2,col3')
+        r = records.array([(456, b'dbe', 1.2), (2, b'de', 1.3)],
+                          names='col1,col2,col3', formats='i8,S3,f8',
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4806,6 +4873,23 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            # The conditions for guessing the correct alignment are very tricky,
+            # so better disable the checks.  Feel free to re-enable them during
+            # debugging by removing the False condition below.
+            if False:
+                if is_os_64bit() and is_python_64bit():
+                    self.assertEqual(table1.description._v_offsets, [0, 8, 16])
+                    self.assertEqual(table1.description._v_itemsize, 24)
+                elif not is_os_64bit() and not is_python_64bit():
+                    self.assertEqual(table1.description._v_offsets, [0, 8, 12])
+                    self.assertEqual(table1.description._v_itemsize, 20)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 8, 11])
+            self.assertEqual(table1.description._v_itemsize, 19)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # Leaf attributes
         self.assertEqual(table1.title, table2.title)
@@ -4824,8 +4908,9 @@ class CopyTestCase(common.TempFileMixin, TestCase):
             print("Running %s.test05b_copy..." % self.__class__.__name__)
 
         # Create a recarray
-        r = records.array([(456, b'dbe', 1.2), (
-                          2, b'de', 1.3)], names='col1,col2,col3')
+        r = records.array([(456, b'dbe', 1.2), (2, b'de', 1.3)],
+                          names='col1,col2,col3', formats='i8,S3,f4',
+                          aligned=self.aligned)
         # Save it in a table:
         table1 = self.h5file.create_table(self.h5file.root, 'table1', r,
                                           "title table1")
@@ -4874,6 +4959,15 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(table1.coldtypes, table2.coldtypes)
         self.assertEqualColinstances(table1, table2)
         self.assertEqual(repr(table1.description), repr(table2.description))
+        # Check alignment
+        if self.aligned and self.open_kwargs['allow_padding'] == True:
+            self.assertEqual(table1.description._v_offsets, [0, 8, 12])
+            self.assertEqual(table1.description._v_itemsize, 16)
+        else:
+            self.assertEqual(table1.description._v_offsets, [0, 8, 11])
+            self.assertEqual(table1.description._v_itemsize, 15)
+        self.assertEqual(table1.description._v_offsets, table2.description._v_offsets)
+        self.assertEqual(table1.description._v_itemsize, table2.description._v_itemsize)
 
         # Leaf attributes
         self.assertEqual(table1.title, table2.title)
@@ -4881,18 +4975,37 @@ class CopyTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(1, table2.filters.shuffle)
         self.assertEqual(table1.filters.fletcher32, table2.filters.fletcher32)
         # User attributes
-#       self.assertEqual(table2.attrs.attr1, None)
-#       self.assertEqual(table2.attrs.attr2, None)
         self.assertEqual(hasattr(table2.attrs, "attr1"), 0)
         self.assertEqual(hasattr(table2.attrs, "attr2"), 0)
 
 
 class CloseCopyTestCase(CopyTestCase):
-    close = 1
+    close = True
+    aligned = False
+    open_kwargs = {'allow_padding': False}
 
 
 class OpenCopyTestCase(CopyTestCase):
-    close = 0
+    close = False
+    aligned = False
+    open_kwargs = {'allow_padding': True}
+
+
+class AlignedCloseCopyTestCase(CopyTestCase):
+    close = True
+    aligned = True
+    open_kwargs = {'allow_padding': False}
+
+
+class AlignedOpenCopyTestCase(CopyTestCase):
+    close = False
+    aligned = True
+    open_kwargs = {'allow_padding': True}
+
+class AlignedNoPaddingOpenCopyTestCase(CopyTestCase):
+    close = False
+    aligned = True
+    open_kwargs = {'allow_padding': False}
 
 
 class CopyIndexTestCase(common.TempFileMixin, TestCase):
@@ -6118,8 +6231,8 @@ class RowContainsTestCase(common.TempFileMixin, TestCase):
         if common.verbose:
             print("row -->", row[:])
         for item in (1, 2, 3):
-            self.assertTrue(item in row)
-        self.assertTrue(4 not in row)
+            self.assertIn(item, row)
+        self.assertNotIn(4, row)
 
 
 class AccessClosedTestCase(common.TempFileMixin, TestCase):
@@ -6402,11 +6515,11 @@ def suite():
         theSuite.addTest(unittest.makeSuite(BasicWriteTestCase))
         theSuite.addTest(unittest.makeSuite(OldRecordBasicWriteTestCase))
         theSuite.addTest(unittest.makeSuite(DictWriteTestCase))
-        theSuite.addTest(unittest.makeSuite(DictWriteTestCase2))
         theSuite.addTest(unittest.makeSuite(NumPyDTWriteTestCase))
         theSuite.addTest(unittest.makeSuite(RecArrayOneWriteTestCase))
         theSuite.addTest(unittest.makeSuite(RecArrayTwoWriteTestCase))
         theSuite.addTest(unittest.makeSuite(RecArrayThreeWriteTestCase))
+        theSuite.addTest(unittest.makeSuite(RecArrayAlignedWriteTestCase))
         theSuite.addTest(unittest.makeSuite(CompressBloscTablesTestCase))
         theSuite.addTest(unittest.makeSuite(
             CompressBloscShuffleTablesTestCase))
@@ -6446,6 +6559,9 @@ def suite():
         theSuite.addTest(unittest.makeSuite(RecArrayIO2))
         theSuite.addTest(unittest.makeSuite(OpenCopyTestCase))
         theSuite.addTest(unittest.makeSuite(CloseCopyTestCase))
+        theSuite.addTest(unittest.makeSuite(AlignedOpenCopyTestCase))
+        theSuite.addTest(unittest.makeSuite(AlignedCloseCopyTestCase))
+        theSuite.addTest(unittest.makeSuite(AlignedNoPaddingOpenCopyTestCase))
         theSuite.addTest(unittest.makeSuite(CopyIndex1TestCase))
         theSuite.addTest(unittest.makeSuite(CopyIndex2TestCase))
         theSuite.addTest(unittest.makeSuite(CopyIndex3TestCase))

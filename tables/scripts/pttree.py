@@ -24,7 +24,6 @@ import os
 import argparse
 from collections import defaultdict, deque
 import warnings
-from six.moves import zip
 
 
 def _get_parser():
@@ -176,7 +175,10 @@ def get_tree_str(f, where='/', max_depth=-1, print_class=True,
         ref_idx[path] = ref_count[addr]
         hl_addresses[path] = addr
 
-        if isinstance(node, tables.Leaf):
+        if isinstance(node, tables.UnImplemented):
+            leaves.append(node)
+
+        elif isinstance(node, tables.Leaf):
 
             # only count the size of a hardlinked leaf the first time it is
             # visited
@@ -202,7 +204,7 @@ def get_tree_str(f, where='/', max_depth=-1, print_class=True,
 
                 except NotImplementedError as e:
                     # size_on_disk is not implemented for VLArrays
-                    warnings.warn(e.message)
+                    warnings.warn(str(e))
 
             # push leaf nodes onto the stack for the next pass
             leaves.append(node)
@@ -218,7 +220,6 @@ def get_tree_str(f, where='/', max_depth=-1, print_class=True,
             # instead
             else:
                 leaves.append(node)
-
 
     # on the second pass we start at each leaf and work upwards towards the
     # root node, computing the cumulative size of each branch at each node, and
@@ -315,7 +316,7 @@ def get_tree_str(f, where='/', max_depth=-1, print_class=True,
                 pretty[path].sort_by = node._v_name
             else:
                 # natural order
-                if path is '/':
+                if path == '/':
                     # root is not in root._v_children
                     pretty[path].sort_by = 0
                 else:
@@ -324,7 +325,7 @@ def get_tree_str(f, where='/', max_depth=-1, print_class=True,
 
             # exclude root node or we'll get infinite recursions (since '/' is
             # the parent of '/')
-            if path is not '/':
+            if path != '/':
 
                 # create a PrettyTree for the parent of this node, if one
                 # doesn't exist already

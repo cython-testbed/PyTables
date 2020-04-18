@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
-from __future__ import absolute_import
 import os
 import sys
 
@@ -14,7 +12,6 @@ from tables.tests import common
 from tables.tests.common import allequal
 from tables.tests.common import unittest
 from tables.tests.common import PyTablesTestCase as TestCase
-from six.moves import range
 
 
 class BasicTestCase(common.TempFileMixin, TestCase):
@@ -482,7 +479,7 @@ class BasicTestCase(common.TempFileMixin, TestCase):
             slice_obj = [slice(None)] * len(earray.shape)
             #slice_obj[earray.maindim] = slice(self.start, stop, self.step)
             slice_obj[earray.maindim] = slice(self.start, self.stop, self.step)
-            row = row[slice_obj].copy()
+            row = row[tuple(slice_obj)].copy()
             earray.read(self.start, self.stop, self.step, out=row)
         except IndexError:
             row = numpy.empty(shape=self.shape, dtype=self.dtype)
@@ -1276,7 +1273,7 @@ class SizeOnDiskInMemoryPropertyTestCase(common.TempFileMixin, TestCase):
         self.assertTrue(
             abs(self.array.size_on_disk - file_size) <= self.hdf_overhead)
         self.assertEqual(self.array.size_in_memory, 10 * 1000 * 10 * 4)
-        self.assertTrue(self.array.size_on_disk < self.array.size_in_memory)
+        self.assertLess(self.array.size_on_disk, self.array.size_in_memory)
 
 
 class OffsetStrideTestCase(common.TempFileMixin, TestCase):

@@ -1,7 +1,5 @@
 # -*- coding: latin-1 -*-
 
-from __future__ import print_function
-from __future__ import absolute_import
 import sys
 
 import numpy
@@ -17,7 +15,6 @@ from tables.tests.common import allequal
 from tables.tests.common import unittest, test_filename, blosc_version
 from tables.tests.common import PyTablesTestCase as TestCase
 from tables.utils import byteorders
-from six.moves import range
 
 
 class C:
@@ -1162,7 +1159,7 @@ class TypesTestCase(common.TempFileMixin, TestCase):
                 print("First row in vlarray ==>", row[0])
 
             self.assertEqual(vlarray.byteorder, byteorder)
-            self.assertTrue(byteorders[row[0].dtype.byteorder], sys.byteorder)
+            self.assertEqual(byteorders[row[0].dtype.byteorder], sys.byteorder)
             self.assertEqual(vlarray.nrows, 2)
             self.assertTrue(allequal(row[0], numpy.array([4.3, 2.2, 4.3],
                                                          dtype=ttypes[atype])))
@@ -2679,7 +2676,7 @@ class ReadRangeTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(vlarray.nrows, self.nrows)
         self.assertEqual(len(row[0]), 5)
         self.assertEqual(len(row[1]), 4)
-        self.assertTrue(len(row[2]), 5)
+        self.assertEqual(len(row[2]), 5)
         for x in range(0, 10, 2):
             self.assertTrue(
                 allequal(row[0][x//2], numpy.arange(x, dtype='int32')))
@@ -3065,7 +3062,7 @@ class GetItemRangeTestCase(common.TempFileMixin, TestCase):
         self.assertEqual(vlarray.nrows, self.nrows)
         self.assertEqual(len(row[0]), 5)
         self.assertEqual(len(row[1]), 4)
-        self.assertTrue(len(row[2]), 5)
+        self.assertEqual(len(row[2]), 5)
         for x in range(0, 10, 2):
             self.assertTrue(
                 allequal(row[0][x//2], numpy.arange(x, dtype='int32')))

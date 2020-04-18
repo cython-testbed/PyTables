@@ -4,8 +4,6 @@
 
 """
 
-from __future__ import print_function
-from __future__ import absolute_import
 import hashlib
 import sys
 import time
@@ -17,7 +15,6 @@ from tables import (
 from tables.tests import common
 from tables.tests.common import unittest
 from tables.tests.common import PyTablesTestCase as TestCase
-from six.moves import range
 
 HEXDIGEST = '2aafb84ab739bb4ae61d2939dc010bfd'
 
@@ -120,7 +117,7 @@ class TimestampTestCase(TrackTimesMixin, common.TempFileMixin, TestCase):
                 else:
                     self.assertNotEqual(timestamps.ctime, 0)
                     tracked_ctimes.append(timestamps.ctime)
-            self.assertTrue(tracked_ctimes[1] >= tracked_ctimes[0])
+            self.assertGreaterEqual(tracked_ctimes[1], tracked_ctimes[0])
 
 
 class BitForBitTestCase(TrackTimesMixin, common.TempFileMixin, TestCase):
